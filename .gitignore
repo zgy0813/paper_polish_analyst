@@ -30,3 +30,4 @@ logs
 .env
 __pycache__
 /data
+/tests

@@ -101,6 +101,15 @@ class LayeredAnalyzer:
             
             logger.info(f"完整Prompt长度: {len(prompt)} 字符")
             
+            # 输出完整的提示词到日志
+            logger.info("=" * 80)
+            logger.info("单个文件分析 - 完整提示词:")
+            logger.info("=" * 80)
+            logger.info(prompt)
+            logger.info("=" * 80)
+            logger.info("提示词结束")
+            logger.info("=" * 80)
+            
             # 使用新的AI调用方法
             response_text = self._call_ai_api(prompt, 'individual_analysis')
             gpt_analysis = self._parse_gpt_response(response_text)

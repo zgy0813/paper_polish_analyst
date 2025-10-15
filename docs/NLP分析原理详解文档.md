@@ -22,9 +22,8 @@ PDF文本 → NLP预处理 → 特征提取 → 统计分析 → 模式识别 �
 
 ### 主要依赖库
 ```python
-import nltk                    # 自然语言处理核心库
-from nltk.tokenize import sent_tokenize, word_tokenize  # 分词工具
-from nltk.corpus import stopwords                       # 停用词库
+import spacy                   # 高性能NLP库
+from spacy.lang.en.stop_words import STOP_WORDS  # 英文停用词
 from sklearn.feature_extraction.text import TfidfVectorizer  # TF-IDF向量化
 from sklearn.metrics.pairwise import cosine_similarity  # 余弦相似度
 import numpy as np             # 数值计算
@@ -32,7 +31,7 @@ from collections import Counter # 词频统计
 ```
 
 ### 技术选择理由
-- **NLTK**：成熟的NLP库，提供完整的文本处理工具链
+- **spaCy (en_core_web_md)**：高性能NLP库，提供词性标注、依存分析、命名实体识别和词向量功能。en_core_web_md模型包含685k词向量，提供更准确的学术文本分析。
 - **scikit-learn**：强大的机器学习库，用于文本向量化和相似度计算
 - **NumPy**：高效的数值计算，支持统计分析
 - **Counter**：Python内置的高效词频统计工具
@@ -346,9 +345,84 @@ def detect_anomalies(values, threshold=2):
     return anomalies
 ```
 
+## 🚀 spaCy高级功能
+
+### 命名实体识别 (Named Entity Recognition)
+spaCy的en_core_web_md模型能够识别文本中的命名实体，如人名、组织、地点、日期等：
+```python
+def analyze_advanced_features(self, text: str) -> Dict:
+    doc = self.nlp(text)
+    entities = {}
+    for ent in doc.ents:
+        if ent.label_ not in entities:
+            entities[ent.label_] = []
+        entities[ent.label_].append(ent.text)
+    return entities
+```
+
+### 词性标注和依存分析
+spaCy提供准确的词性标注和依存关系分析：
+```python
+# 词性标注统计
+pos_counts = {}
+for token in doc:
+    if token.pos_ not in pos_counts:
+        pos_counts[token.pos_] = 0
+    pos_counts[token.pos_] += 1
+
+# 依存关系分析
+dependency_patterns = {}
+for token in doc:
+    if token.dep_ not in dependency_patterns:
+        dependency_patterns[token.dep_] = 0
+    dependency_patterns[token.dep_] += 1
+```
+
+### 词向量语义相似度
+利用en_core_web_md模型中的685k词向量计算语义相似度：
+```python
+def calculate_semantic_similarity(self, text1: str, text2: str) -> float:
+    doc1 = self.nlp(text1)
+    doc2 = self.nlp(text2)
+    similarity = doc1.similarity(doc2)
+    return float(similarity)
+```
+
+### 学术关键词提取
+结合词性、词频和学术特征提取关键词：
+```python
+def extract_academic_keywords(self, text: str, top_n: int = 10) -> List[Dict]:
+    doc = self.nlp(text)
+    word_scores = {}
+    for token in doc:
+        if (token.is_alpha and 
+            token.pos_ in ['NOUN', 'ADJ', 'VERB'] and 
+            len(token.text) > 3 and 
+            token.text.lower() not in self.stop_words):
+            
+            word = token.text.lower()
+            base_score = word_scores.get(word, 0) + 1
+            
+            # 词性权重
+            pos_weight = {'NOUN': 1.5, 'ADJ': 1.2, 'VERB': 1.3}.get(token.pos_, 1.0)
+            
+            # 学术词汇权重
+            academic_weight = 1.5 if any(pattern in word for pattern in 
+                ['tion', 'sion', 'ment', 'analy', 'investig', 'examin']) else 1.0
+            
+            word_scores[word] = base_score * pos_weight * academic_weight
+    
+    return sorted(word_scores.items(), key=lambda x: x[1], reverse=True)[:top_n]
+```
+
 ## 📈 性能优化策略
 
 ### 1. 计算效率优化
+
+#### spaCy性能优势
+- **处理速度**：spaCy比NLTK快2-3倍，内存使用更少
+- **并行处理**：spaCy原生支持多线程处理
+- **模型优化**：en_core_web_md模型在准确性和性能间取得平衡
 
 #### 向量化计算
 ```python

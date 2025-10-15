@@ -8,32 +8,37 @@ import re
 import math
 from typing import List, Dict, Tuple, Counter
 from collections import Counter
-import nltk
-from nltk.tokenize import sent_tokenize, word_tokenize
-from nltk.corpus import stopwords
+import spacy
+from spacy.lang.en.stop_words import STOP_WORDS as SPACY_STOP_WORDS
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
-
-# 下载必要的NLTK数据
-try:
-    nltk.data.find('tokenizers/punkt')
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    try:
-        nltk.download('punkt')
-        nltk.download('stopwords')
-    except:
-        # 如果下载失败，使用备用方案
-        pass
 
 class NLPUtils:
     """NLP工具类"""
     
     def __init__(self):
         """初始化NLP工具"""
-        self.stop_words = set(stopwords.words('english'))
+        # Load spaCy with en_core_web_md model
+        try:
+            self.nlp = spacy.load("en_core_web_md")
+            self.stop_words = SPACY_STOP_WORDS
+            self.backend = "spacy"
+            print("Using spaCy backend with en_core_web_md model")
+        except OSError as e:
+            raise RuntimeError(f"spaCy model 'en_core_web_md' not found. Please install it with: python -m spacy download en_core_web_md") from e
+        
         self.vectorizer = TfidfVectorizer(max_features=1000, stop_words='english')
+    
+    def _tokenize_text(self, text: str) -> List[str]:
+        """Tokenize text using spaCy"""
+        doc = self.nlp(text)
+        return [token.text for token in doc if token.is_alpha and token.text.lower() not in self.stop_words]
+    
+    def _split_sentences(self, text: str) -> List[str]:
+        """Split text into sentences using spaCy"""
+        doc = self.nlp(text)
+        return [sent.text.strip() for sent in doc.sents]
     
     def analyze_sentence_structure(self, text: str) -> Dict:
         """
@@ -45,17 +50,17 @@ class NLPUtils:
         Returns:
             句式结构分析结果
         """
-        try:
-            sentences = sent_tokenize(text)
-        except:
-            # 如果NLTK不可用，使用简单的句子分割
-            sentences = [s.strip() for s in text.split('.') if s.strip()]
+        sentences = self._split_sentences(text)
         
         if not sentences:
             return {}
         
         # 计算句子长度统计
-        sentence_lengths = [len(word_tokenize(sent)) for sent in sentences]
+        sentence_lengths = []
+        for sent in sentences:
+            # Use spaCy for more accurate tokenization
+            doc = self.nlp(sent)
+            sentence_lengths.append(len([token for token in doc if token.is_alpha]))
         
         # 识别复合句（包含连接词的句子）
         compound_sentences = 0
@@ -72,12 +77,12 @@ class NLPUtils:
         
         return {
             'total_sentences': len(sentences),
-            'avg_sentence_length': sum(sentence_lengths) / len(sentence_lengths),
-            'sentence_length_variance': np.var(sentence_lengths),
-            'compound_sentence_ratio': compound_sentences / len(sentences),
-            'complex_sentence_ratio': complex_sentences / len(sentences),
-            'max_sentence_length': max(sentence_lengths),
-            'min_sentence_length': min(sentence_lengths)
+            'avg_sentence_length': sum(sentence_lengths) / len(sentence_lengths) if sentence_lengths else 0,
+            'sentence_length_variance': np.var(sentence_lengths) if sentence_lengths else 0,
+            'compound_sentence_ratio': compound_sentences / len(sentences) if sentences else 0,
+            'complex_sentence_ratio': complex_sentences / len(sentences) if sentences else 0,
+            'max_sentence_length': max(sentence_lengths) if sentence_lengths else 0,
+            'min_sentence_length': min(sentence_lengths) if sentence_lengths else 0
         }
     
     def analyze_vocabulary(self, text: str) -> Dict:
@@ -90,14 +95,7 @@ class NLPUtils:
         Returns:
             词汇分析结果
         """
-        try:
-            # 分词并清理
-            words = word_tokenize(text.lower())
-            words = [word for word in words if word.isalpha() and word not in self.stop_words]
-        except:
-            # 如果NLTK不可用，使用简单的词汇分割
-            words = [word.lower() for word in text.split() if word.isalpha()]
-            words = [word for word in words if word not in self.stop_words]
+        words = self._tokenize_text(text)
         
         if not words:
             return {}
@@ -113,11 +111,11 @@ class NLPUtils:
         return {
             'total_words': len(words),
             'unique_words': len(word_counts),
-            'vocabulary_richness': len(word_counts) / len(words),
-            'academic_word_ratio': len(academic_words) / len(words),
+            'vocabulary_richness': len(word_counts) / len(words) if words else 0,
+            'academic_word_ratio': len(academic_words) / len(words) if words else 0,
             'most_common_words': dict(word_counts.most_common(10)),
             'verb_tense_analysis': tense_analysis,
-            'avg_word_length': sum(len(word) for word in words) / len(words)
+            'avg_word_length': sum(len(word) for word in words) / len(words) if words else 0
         }
     
     def analyze_paragraph_structure(self, text: str) -> Dict:
@@ -135,20 +133,22 @@ class NLPUtils:
         if not paragraphs:
             return {}
         
-        try:
-            paragraph_lengths = [len(word_tokenize(p)) for p in paragraphs]
-        except:
-            paragraph_lengths = [len(p.split()) for p in paragraphs]
+        # 计算段落长度
+        paragraph_lengths = []
+        for para in paragraphs:
+            # Use spaCy for more accurate tokenization
+            doc = self.nlp(para)
+            paragraph_lengths.append(len([token for token in doc if token.is_alpha]))
         
         # 分析主题句位置（段落第一句的特征）
         topic_sentence_analysis = self._analyze_topic_sentences(paragraphs)
         
         return {
             'total_paragraphs': len(paragraphs),
-            'avg_paragraph_length': sum(paragraph_lengths) / len(paragraph_lengths),
-            'paragraph_length_variance': np.var(paragraph_lengths),
-            'max_paragraph_length': max(paragraph_lengths),
-            'min_paragraph_length': min(paragraph_lengths),
+            'avg_paragraph_length': sum(paragraph_lengths) / len(paragraph_lengths) if paragraph_lengths else 0,
+            'paragraph_length_variance': np.var(paragraph_lengths) if paragraph_lengths else 0,
+            'max_paragraph_length': max(paragraph_lengths) if paragraph_lengths else 0,
+            'min_paragraph_length': min(paragraph_lengths) if paragraph_lengths else 0,
             'topic_sentence_analysis': topic_sentence_analysis
         }
     
@@ -162,12 +162,8 @@ class NLPUtils:
         Returns:
             学术表达分析结果
         """
-        try:
-            sentences = sent_tokenize(text)
-            words = word_tokenize(text.lower())
-        except:
-            sentences = [s.strip() for s in text.split('.') if s.strip()]
-            words = [word.lower() for word in text.split() if word.isalpha()]
+        sentences = self._split_sentences(text)
+        words = self._tokenize_text(text)
         
         # 被动语态检测
         passive_voice_ratio = self._calculate_passive_voice_ratio(sentences)
@@ -217,22 +213,18 @@ class NLPUtils:
         Returns:
             可读性评分 (0-100)
         """
-        try:
-            sentences = sent_tokenize(text)
-            words = word_tokenize(text)
-        except:
-            sentences = [s.strip() for s in text.split('.') if s.strip()]
-            words = [word for word in text.split() if word.isalpha()]
+        sentences = self._split_sentences(text)
+        words = self._tokenize_text(text)
         
         if not sentences or not words:
             return 0.0
         
         # 基本指标
         avg_sentence_length = len(words) / len(sentences)
-        avg_word_length = sum(len(word) for word in words if word.isalpha()) / len([w for w in words if w.isalpha()])
+        avg_word_length = sum(len(word) for word in words) / len(words) if words else 0
         
         # 词汇多样性
-        unique_words = len(set(word.lower() for word in words if word.isalpha()))
+        unique_words = len(set(word.lower() for word in words))
         vocabulary_richness = unique_words / len(words) if words else 0
         
         # 连接词密度
@@ -287,11 +279,7 @@ class NLPUtils:
         topic_sentences = []
         
         for para in paragraphs:
-            try:
-                sentences = sent_tokenize(para)
-            except:
-                sentences = [s.strip() for s in para.split('.') if s.strip()]
-            
+            sentences = self._split_sentences(para)
             if sentences:
                 topic_sentences.append(sentences[0])
         
@@ -299,36 +287,29 @@ class NLPUtils:
             return {}
         
         # 分析主题句长度
-        try:
-            topic_lengths = [len(word_tokenize(ts)) for ts in topic_sentences]
-        except:
-            topic_lengths = [len(ts.split()) for ts in topic_sentences]
+        topic_lengths = []
+        for ts in topic_sentences:
+            doc = self.nlp(ts)
+            topic_lengths.append(len([token for token in doc if token.is_alpha]))
         
         return {
-            'avg_topic_sentence_length': sum(topic_lengths) / len(topic_lengths),
-            'topic_sentence_variance': np.var(topic_lengths)
+            'avg_topic_sentence_length': sum(topic_lengths) / len(topic_lengths) if topic_lengths else 0,
+            'topic_sentence_variance': np.var(topic_lengths) if topic_lengths else 0
         }
     
     def _calculate_passive_voice_ratio(self, sentences: List[str]) -> float:
         """计算被动语态比例"""
-        passive_indicators = ['was', 'were', 'been', 'being', 'is', 'are']
+        # Use spaCy for more accurate passive voice detection
         total_verbs = 0
         passive_verbs = 0
         
         for sentence in sentences:
-            try:
-                words = word_tokenize(sentence.lower())
-            except:
-                words = [word.lower() for word in sentence.split() if word.isalpha()]
-            
-            for i, word in enumerate(words):
-                if word in passive_indicators:
+            doc = self.nlp(sentence)
+            for token in doc:
+                if token.pos_ == "AUX" and token.dep_ == "auxpass":
+                    passive_verbs += 1
+                elif token.pos_ == "VERB":
                     total_verbs += 1
-                    # 简单的被动语态检测：be动词 + 过去分词
-                    if i + 1 < len(words):
-                        next_word = words[i + 1]
-                        if any(next_word.endswith(suffix) for suffix in ['ed', 'en', 't']):
-                            passive_verbs += 1
         
         return passive_verbs / total_verbs if total_verbs > 0 else 0
     
@@ -355,6 +336,133 @@ class NLPUtils:
             'qualifier_count': qualifier_count,
             'qualifier_ratio': qualifier_count / total_words if total_words > 0 else 0
         }
+    
+    def analyze_advanced_features(self, text: str) -> Dict:
+        """
+        使用spaCy的高级功能进行深度分析
+        
+        Args:
+            text: 输入文本
+            
+        Returns:
+            高级分析结果
+        """
+        doc = self.nlp(text)
+        
+        # 命名实体识别
+        entities = {}
+        for ent in doc.ents:
+            if ent.label_ not in entities:
+                entities[ent.label_] = []
+            entities[ent.label_].append(ent.text)
+        
+        # 词性标注统计
+        pos_counts = {}
+        for token in doc:
+            if token.pos_ not in pos_counts:
+                pos_counts[token.pos_] = 0
+            pos_counts[token.pos_] += 1
+        
+        # 依存关系分析
+        dependency_patterns = {}
+        for token in doc:
+            if token.dep_ not in dependency_patterns:
+                dependency_patterns[token.dep_] = 0
+            dependency_patterns[token.dep_] += 1
+        
+        # 词向量相似度分析（如果有向量）
+        word_similarities = []
+        academic_words = ['research', 'study', 'analysis', 'investigation', 'methodology']
+        for word in academic_words:
+            if word in [token.text.lower() for token in doc]:
+                for token in doc:
+                    if token.has_vector and token.text.lower() != word:
+                        similarity = token.similarity(doc.vocab[word])
+                        word_similarities.append({
+                            'word': token.text,
+                            'similarity': similarity,
+                            'target': word
+                        })
+        
+        # 语法复杂度分析
+        complex_structures = 0
+        for sent in doc.sents:
+            # 检测从句（有从属连词标记的句子）
+            if any(token.dep_ == "mark" for token in sent):
+                complex_structures += 1
+        
+        return {
+            'entities': entities,
+            'pos_distribution': pos_counts,
+            'dependency_patterns': dependency_patterns,
+            'word_similarities': word_similarities[:10],  # 只返回前10个
+            'complex_structure_ratio': complex_structures / len(list(doc.sents)) if doc.sents else 0,
+            'has_word_vectors': doc.vocab.vectors.size > 0
+        }
+    
+    def calculate_semantic_similarity(self, text1: str, text2: str) -> float:
+        """
+        使用spaCy的词向量计算语义相似度
+        
+        Args:
+            text1: 第一个文本
+            text2: 第二个文本
+            
+        Returns:
+            语义相似度分数 (0-1)
+        """
+        try:
+            doc1 = self.nlp(text1)
+            doc2 = self.nlp(text2)
+            
+            # 使用spaCy的内置相似度计算
+            similarity = doc1.similarity(doc2)
+            return float(similarity)
+        except Exception:
+            # 如果失败，回退到TF-IDF
+            return self.calculate_text_similarity(text1, text2)
+    
+    def extract_academic_keywords(self, text: str, top_n: int = 10) -> List[Dict]:
+        """
+        提取学术关键词，结合词性和重要性
+        
+        Args:
+            text: 输入文本
+            top_n: 返回关键词数量
+            
+        Returns:
+            关键词列表
+        """
+        doc = self.nlp(text)
+        
+        # 计算词汇重要性（结合词频、词性和长度）
+        word_scores = {}
+        for token in doc:
+            if (token.is_alpha and 
+                token.pos_ in ['NOUN', 'ADJ', 'VERB'] and 
+                len(token.text) > 3 and 
+                token.text.lower() not in self.stop_words):
+                
+                word = token.text.lower()
+                
+                # 基础分数：词频
+                base_score = word_scores.get(word, 0) + 1
+                
+                # 词性权重
+                pos_weight = {'NOUN': 1.5, 'ADJ': 1.2, 'VERB': 1.3}.get(token.pos_, 1.0)
+                
+                # 长度权重（偏好中等长度的词）
+                length_weight = min(len(word) / 8, 1.0) if len(word) <= 8 else max(0.5, 1 - (len(word) - 8) / 10)
+                
+                # 学术词汇权重
+                academic_weight = 1.5 if any(pattern in word for pattern in ['tion', 'sion', 'ment', 'analy', 'investig', 'examin']) else 1.0
+                
+                word_scores[word] = base_score * pos_weight * length_weight * academic_weight
+        
+        # 排序并返回top_n
+        sorted_words = sorted(word_scores.items(), key=lambda x: x[1], reverse=True)
+        return [{"word": word, "frequency": int(score), "importance": score} 
+               for word, score in sorted_words[:top_n]]
 
 def main():
     """测试NLP工具功能"""
@@ -376,6 +484,29 @@ def main():
     
     print("\n可读性评分:")
     print(f"{nlp.calculate_readability_score(test_text):.2f}")
+    
+    print(f"\n后端: {nlp.backend}")
+    
+    print("\n=== 高级功能测试 ===")
+    
+    print("\n高级特征分析:")
+    advanced = nlp.analyze_advanced_features(test_text)
+    print(f"命名实体: {list(advanced.get('entities', {}).keys())}")
+    print(f"词性分布: {advanced.get('pos_distribution', {})}")
+    print(f"是否有词向量: {advanced.get('has_word_vectors', False)}")
+    
+    print("\n学术关键词提取:")
+    keywords = nlp.extract_academic_keywords(test_text, top_n=5)
+    for kw in keywords:
+        print(f"  {kw['word']}: 重要性={kw['importance']:.2f}")
+    
+    print("\n语义相似度测试:")
+    text1 = "This research examines organizational behavior."
+    text2 = "The study investigates corporate culture."
+    semantic_sim = nlp.calculate_semantic_similarity(text1, text2)
+    tfidf_sim = nlp.calculate_text_similarity(text1, text2)
+    print(f"语义相似度: {semantic_sim:.3f}")
+    print(f"TF-IDF相似度: {tfidf_sim:.3f}")
 
 if __name__ == "__main__":
     main()
