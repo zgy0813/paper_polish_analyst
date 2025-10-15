@@ -2,7 +2,7 @@
 
 一个基于AI的智能学术论文润色工具，专门针对AMJ（Academy of Management Journal）期刊的写作风格进行优化。系统通过分析历史期刊论文提取写作风格特征，结合官方风格指南，提供多轮交互式润色和质量评分功能。
 
-**🌟 推荐使用OpenAI GPT-4o模型**，提供最佳的学术写作理解和润色质量，同时支持DeepSeek API作为成本优化选择。
+**🌟 推荐使用OpenAI GPT模型**，提供最佳的学术写作理解和润色质量，同时支持DeepSeek API作为成本优化选择。
 
 [![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
@@ -16,7 +16,7 @@
 - **官方指南整合**: 融合AMJ官方风格指南与历史期刊经验数据，生成混合风格指南
 - **双源规则整合**: 官方规则优先，经验规则补充，智能冲突检测与解决
 - **示例库构建**: 每条规则配备真实示例和统计数据
-- **GPT-4o优化**: 利用最新的OpenAI模型提供更准确的学术写作分析
+- **GPT优化**: 利用最新的OpenAI模型提供更准确的学术写作分析
 - **spaCy NLP引擎**: 使用en_core_web_md模型提供高性能的文本分析和语义理解
 
 ### ✨ 多轮润色
@@ -116,7 +116,7 @@ python main.py status
 如果配置正确，您会看到：
 ```
 ✅ 使用 OpenAI API
-   模型: gpt-4o
+   模型: GPT
    Base URL: https://api.openai.com/v1
 ```
 
@@ -372,7 +372,7 @@ PDF文件 → PyMuPDF解析 → 布局分析 → 文本重组 → 清理优化 �
 
 ### 技术栈
 
-- **AI模型**: OpenAI GPT-4o（推荐）/ DeepSeek API
+- **AI模型**: OpenAI GPT（推荐）/ DeepSeek API
 - **PDF处理**: PyMuPDF (fitz)
 - **NLP分析**: spaCy (en_core_web_md), scikit-learn
 - **Web界面**: Streamlit, Plotly
@@ -528,7 +528,7 @@ CORE_RULE_THRESHOLD = 0.8          # 核心规则阈值（80%+论文遵循）
 OPTIONAL_RULE_THRESHOLD = 0.5      # 可选规则阈值（50%-80%论文遵循）
 
 # AI模型配置
-AI_MODEL = "gpt-4o"                # 使用的AI模型（推荐GPT-4o）
+AI_MODEL = "GPT"                # 使用的AI模型（推荐GPT）
 AI_MAX_TOKENS = 4000               # 最大token数
 AI_TEMPERATURE = 0.3               # 生成温度
 
@@ -652,7 +652,7 @@ python main.py clear_cache
 - 首次分析100篇论文需要较多API调用
 - 建议使用较小的批次大小（3-10篇）
 - 监控API使用量，避免超出配额
-- OpenAI GPT-4o提供最佳质量，DeepSeek API可作为成本优化选择
+- OpenAI GPT提供最佳质量，DeepSeek API可作为成本优化选择
 
 ### PDF质量要求
 - 确保PDF文件包含可提取的文本
