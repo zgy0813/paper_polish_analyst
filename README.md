@@ -268,7 +268,7 @@ streamlit run app.py
 - 优先级：最高，确保期刊合规性
 
 **📊 经验规则（实证性）**
-- 来源：82篇已发表的高质量AMJ论文分析
+- 来源：多篇已发表的高质量AMJ论文分析
 - 特点：实际写作模式，可操作性强
 - 优先级：基于遵循率分级（核心/可选/建议）
 
@@ -538,7 +538,7 @@ ai/
 ├── 📦 requirements.txt               # 依赖包列表
 │
 ├── 📁 data/                          # 数据目录
-│   ├── 📁 journals/                  # 期刊PDF文件 (82个文件)
+│   ├── 📁 journals/                  # 期刊PDF文件
 │   ├── 📁 extracted/                 # 提取的文本文件
 │   ├── 📁 individual_reports/        # 单篇分析报告
 │   ├── 📁 batch_summaries/           # 批次汇总报告
