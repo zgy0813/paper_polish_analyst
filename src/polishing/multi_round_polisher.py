@@ -5,6 +5,7 @@
 """
 
 import json
+import re
 from typing import Dict, List, Tuple
 from pathlib import Path
 from datetime import datetime
@@ -59,26 +60,31 @@ class MultiRoundPolisher:
                 return
             except Exception as e:
                 logger.warning(f"加载混合风格指南失败: {str(e)}")
-
-        # 回退到原始风格指南
-        if not self.style_guide_generator.load_style_guide():
-            logger.warning("无法加载风格指南，将使用默认设置")
-            self.style_guide = {}
         else:
-            self.style_guide = self.style_guide_generator.style_guide
+            raise FileNotFoundError("混合风格指南不存在")
 
-    def polish_paper(self, paper_text: str, interactive: bool = True) -> Dict:
+    def set_style(self, style: str) -> None:
         """
-        润色论文
+        设置润色风格
+        
+        Args:
+            style: 风格名称 (conservative, balanced, innovative)
+        """
+        self.selected_style = style
+        logger.info(f"设置润色风格: {style}")
+
+    def polish_paper(self, paper_text: str, style: str = "balanced") -> Dict:
+        """
+        润色论文（仅支持非交互式润色）
 
         Args:
             paper_text: 原始论文文本
-            interactive: 是否使用交互模式
+            style: 润色风格 (conservative, balanced, innovative, auto)
 
         Returns:
             润色结果
         """
-        logger.info(f"开始润色论文，交互模式: {interactive}")
+        logger.info(f"开始非交互式润色论文，风格: {style}")
 
         try:
             # 初始化
@@ -86,15 +92,21 @@ class MultiRoundPolisher:
             self.modification_history = []
             self.user_selections = {}
 
+            # 设置风格
+            if style != "auto":
+                self.set_style(style)
+            else:
+                # 自动推荐风格
+                paper_features = self.style_selector.analyze_paper_features(paper_text)
+                recommended_style = self.style_selector.recommend_style(paper_features)
+                logger.info(f"自动推荐风格: {recommended_style}")
+                self.set_style(recommended_style)
+
             # 计算润色前评分
             before_scores = self.quality_scorer.score_paper(paper_text)
 
-            if interactive:
-                # 交互式润色
-                result = self._interactive_polishing()
-            else:
-                # 非交互式润色（一次性处理）
-                self._batch_polishing()
+            # 执行非交互式润色（一次性处理）
+            self._batch_polishing_with_style()
 
             # 计算润色后评分
             after_scores = self.quality_scorer.score_paper(self.current_text)
@@ -116,6 +128,8 @@ class MultiRoundPolisher:
                 "user_selections": self.user_selections,
                 "polishing_summary": self._generate_polishing_summary(),
                 "timestamp": datetime.now().isoformat(),
+                "interactive_mode": False,  # 固定为非交互式
+                "style_used": self.selected_style if hasattr(self, 'selected_style') else style
             }
 
             logger.info("论文润色完成")
@@ -130,24 +144,95 @@ class MultiRoundPolisher:
                 "polished_text": paper_text,
             }
 
+    def polish_paper_simple(self, paper_text: str, style: str = "balanced") -> Dict:
+        """
+        简洁润色论文（只返回润色后的文本，不包含详细修改说明）
+
+        Args:
+            paper_text: 原始论文文本
+            style: 润色风格 (conservative, balanced, innovative, auto)
+
+        Returns:
+            简洁润色结果
+        """
+        logger.info(f"开始简洁润色论文，风格: {style}")
+
+        try:
+            # 初始化
+            self.current_text = paper_text
+            self.modification_history = []
+            self.user_selections = {}
+
+            # 设置风格
+            if style != "auto":
+                self.set_style(style)
+            else:
+                # 自动推荐风格
+                paper_features = self.style_selector.analyze_paper_features(paper_text)
+                recommended_style = self.style_selector.recommend_style(paper_features)
+                logger.info(f"自动推荐风格: {recommended_style}")
+                self.set_style(recommended_style)
+
+            # 计算润色前评分
+            before_scores = self.quality_scorer.score_paper(paper_text)
+
+            # 执行简洁润色
+            polished_text = self._simple_polish_with_style()
+
+            # 计算润色后评分
+            after_scores = self.quality_scorer.score_paper(polished_text)
+
+            # 比较评分
+            score_comparison = self.quality_scorer.compare_scores(
+                before_scores, after_scores
+            )
+
+            # 生成简洁结果
+            final_result = {
+                "success": True,
+                "original_text": paper_text,
+                "polished_text": polished_text,
+                "before_scores": before_scores,
+                "after_scores": after_scores,
+                "score_comparison": score_comparison,
+                "polishing_summary": {
+                    "total_rounds": 1,
+                    "total_modifications_applied": 1,  # 整体润色
+                    "style_used": self.selected_style if hasattr(self, 'selected_style') else style
+                },
+                "timestamp": datetime.now().isoformat(),
+                "simple_mode": True,
+                "style_used": self.selected_style if hasattr(self, 'selected_style') else style
+            }
+
+            logger.info("简洁润色完成")
+            return final_result
+
+        except Exception as e:
+            logger.error(f"简洁润色失败: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "original_text": paper_text,
+                "polished_text": paper_text,
+            }
+
     def polish_paper_with_choices(
         self,
         paper_text: str,
         style_preference: str = "balanced",
-        interactive: bool = True,
     ) -> Dict:
         """
-        基于风格选择的论文润色
+        基于风格选择的论文润色（仅支持非交互式润色）
 
         Args:
             paper_text: 原始论文文本
-            style_preference: 风格偏好 ("conservative", "balanced", "innovative")
-            interactive: 是否使用交互模式
+            style_preference: 风格偏好 ("conservative", "balanced", "innovative", "auto")
 
         Returns:
             润色结果
         """
-        logger.info(f"开始基于风格选择的论文润色，风格: {style_preference}")
+        logger.info(f"开始基于风格选择的非交互式论文润色，风格: {style_preference}")
 
         try:
             # 初始化
@@ -170,12 +255,8 @@ class MultiRoundPolisher:
             # 计算润色前评分
             before_scores = self.quality_scorer.score_paper(paper_text)
 
-            if interactive:
-                # 交互式润色
-                result = self._interactive_polishing_with_style()
-            else:
-                # 非交互式润色
-                self._batch_polishing_with_style()
+            # 执行非交互式润色
+            self._batch_polishing_with_style()
 
             # 计算润色后评分
             after_scores = self.quality_scorer.score_paper(self.current_text)
@@ -200,6 +281,7 @@ class MultiRoundPolisher:
                 "user_selections": self.user_selections,
                 "polishing_summary": self._generate_style_polishing_summary(),
                 "timestamp": datetime.now().isoformat(),
+                "interactive_mode": False,  # 固定为非交互式
             }
 
             logger.info("基于风格选择的论文润色完成")
@@ -263,44 +345,70 @@ class MultiRoundPolisher:
 
     def _batch_polishing(self) -> Dict:
         """
-        批量润色（非交互式）
+        批量润色（非交互式）- 一次性完成所有润色
 
         Returns:
             润色结果
         """
-        logger.info("开始批量润色")
+        logger.info("开始综合批量润色（一次性完成句式、词汇、段落润色）")
+        logger.info(f"输入文本长度: {len(self.current_text)} 字符")
 
-        # 三轮润色：句式结构调整、词汇优化、段落衔接
-        rounds = [
-            {"round": 1, "name": "句式结构调整", "focus": "sentence_structure"},
-            {"round": 2, "name": "词汇优化", "focus": "vocabulary"},
-            {"round": 3, "name": "段落衔接", "focus": "transitions"},
-        ]
+        # 生成综合修改建议
+        comprehensive_modifications = self._generate_comprehensive_modifications()
 
-        for round_info in rounds:
-            logger.info(f"执行第{round_info['round']}轮润色: {round_info['name']}")
+        # 按顺序应用三类修改
+        total_modifications = 0
+        
+        # 1. 应用句式结构修改
+        sentence_modifications = comprehensive_modifications.get("sentence_structure", {}).get("modifications", [])
+        if sentence_modifications:
+            logger.info(f"应用句式结构修改: {len(sentence_modifications)}条")
+            for i, mod in enumerate(sentence_modifications[:3], 1):  # 只记录前3条修改的详情
+                logger.info(f"  修改{i}: {mod.get('original_text', '')[:50]}... -> {mod.get('modified_text', '')[:50]}...")
+            if len(sentence_modifications) > 3:
+                logger.info(f"  ... 还有{len(sentence_modifications)-3}条修改")
+            self._apply_all_modifications({"round": 1, "name": "句式结构调整"}, sentence_modifications)
+            total_modifications += len(sentence_modifications)
 
-            # 生成修改建议
-            modifications = self._generate_round_modifications(round_info)
+        # 2. 应用词汇优化修改
+        vocabulary_modifications = comprehensive_modifications.get("vocabulary", {}).get("modifications", [])
+        if vocabulary_modifications:
+            logger.info(f"应用词汇优化修改: {len(vocabulary_modifications)}条")
+            for i, mod in enumerate(vocabulary_modifications[:3], 1):  # 只记录前3条修改的详情
+                logger.info(f"  修改{i}: {mod.get('word_changed', '')} - {mod.get('reason', '')[:50]}...")
+            if len(vocabulary_modifications) > 3:
+                logger.info(f"  ... 还有{len(vocabulary_modifications)-3}条修改")
+            self._apply_all_modifications({"round": 2, "name": "词汇优化"}, vocabulary_modifications)
+            total_modifications += len(vocabulary_modifications)
 
-            if not modifications:
-                continue
+        # 3. 应用段落衔接修改
+        transition_modifications = comprehensive_modifications.get("transitions", {}).get("modifications", [])
+        if transition_modifications:
+            logger.info(f"应用段落衔接修改: {len(transition_modifications)}条")
+            for i, mod in enumerate(transition_modifications[:3], 1):  # 只记录前3条修改的详情
+                logger.info(f"  修改{i}: {mod.get('transition_added', '')} - {mod.get('reason', '')[:50]}...")
+            if len(transition_modifications) > 3:
+                logger.info(f"  ... 还有{len(transition_modifications)-3}条修改")
+            self._apply_all_modifications({"round": 3, "name": "段落衔接"}, transition_modifications)
+            total_modifications += len(transition_modifications)
 
-            # 自动应用所有修改
-            self._apply_all_modifications(round_info, modifications)
+        # 记录综合修改历史
+        self.modification_history.append(
+            {
+                "round": 0,  # 0表示综合润色
+                "round_name": "综合润色",
+                "modifications_proposed": total_modifications,
+                "modifications_applied": total_modifications,
+                "auto_applied": True,
+                "sentence_structure_count": len(sentence_modifications),
+                "vocabulary_count": len(vocabulary_modifications),
+                "transitions_count": len(transition_modifications),
+                "comprehensive_summary": comprehensive_modifications.get("overall_summary", {})
+            }
+        )
 
-            # 记录修改历史
-            self.modification_history.append(
-                {
-                    "round": round_info["round"],
-                    "round_name": round_info["name"],
-                    "modifications_proposed": len(modifications),
-                    "modifications_applied": len(modifications),
-                    "auto_applied": True,
-                }
-            )
-
-        return {"batch_completed": True}
+        logger.info(f"综合润色完成，共应用 {total_modifications} 条修改")
+        return {"batch_completed": True, "total_modifications": total_modifications}
 
     def _interactive_polishing_with_style(self) -> Dict:
         """
@@ -355,45 +463,262 @@ class MultiRoundPolisher:
 
     def _batch_polishing_with_style(self) -> Dict:
         """
-        基于风格选择的批量润色（非交互式）
+        基于风格选择的批量润色（非交互式）- 一次性完成所有润色
 
         Returns:
             润色结果
         """
-        logger.info(f"开始基于风格选择的批量润色，风格: {self.selected_style}")
+        logger.info(f"开始基于风格选择的综合批量润色，风格: {self.selected_style}")
+        logger.info(f"输入文本长度: {len(self.current_text)} 字符")
 
-        # 三轮润色：句式结构调整、词汇优化、段落衔接
-        rounds = [
-            {"round": 1, "name": "句式结构调整", "focus": "sentence_structure"},
-            {"round": 2, "name": "词汇优化", "focus": "vocabulary"},
-            {"round": 3, "name": "段落衔接", "focus": "transitions"},
-        ]
+        # 生成综合修改建议
+        comprehensive_modifications = self._generate_comprehensive_modifications_with_style()
 
-        for round_info in rounds:
-            logger.info(f"开始第{round_info['round']}轮润色: {round_info['name']}")
+        # 按顺序应用三类修改
+        total_modifications = 0
+        all_applied_modifications = []
+        
+        # 1. 应用句式结构修改
+        sentence_modifications = comprehensive_modifications.get("sentence_structure", {}).get("modifications", [])
+        sentence_round_info = {"round": 1, "name": "句式结构调整"}
+        if sentence_modifications:
+            logger.info(f"应用句式结构修改: {len(sentence_modifications)}条")
+            for i, mod in enumerate(sentence_modifications[:3], 1):  # 只记录前3条修改的详情
+                logger.info(f"  修改{i}: {mod.get('original_text', '')[:50]}... -> {mod.get('modified_text', '')[:50]}...")
+            if len(sentence_modifications) > 3:
+                logger.info(f"  ... 还有{len(sentence_modifications)-3}条修改")
+            self._apply_all_modifications(sentence_round_info, sentence_modifications)
+            all_applied_modifications.extend(sentence_round_info.get("applied_modifications", []))
+            total_modifications += len(sentence_modifications)
 
-            # 生成修改建议
-            modifications = self._generate_round_modifications_with_style(round_info)
+        # 2. 应用词汇优化修改
+        vocabulary_modifications = comprehensive_modifications.get("vocabulary", {}).get("modifications", [])
+        vocabulary_round_info = {"round": 2, "name": "词汇优化"}
+        if vocabulary_modifications:
+            logger.info(f"应用词汇优化修改: {len(vocabulary_modifications)}条")
+            for i, mod in enumerate(vocabulary_modifications[:3], 1):  # 只记录前3条修改的详情
+                logger.info(f"  修改{i}: {mod.get('word_changed', '')} - {mod.get('reason', '')[:50]}...")
+            if len(vocabulary_modifications) > 3:
+                logger.info(f"  ... 还有{len(vocabulary_modifications)-3}条修改")
+            self._apply_all_modifications(vocabulary_round_info, vocabulary_modifications)
+            all_applied_modifications.extend(vocabulary_round_info.get("applied_modifications", []))
+            total_modifications += len(vocabulary_modifications)
 
-            if not modifications:
-                continue
+        # 3. 应用段落衔接修改
+        transition_modifications = comprehensive_modifications.get("transitions", {}).get("modifications", [])
+        transition_round_info = {"round": 3, "name": "段落衔接"}
+        if transition_modifications:
+            logger.info(f"应用段落衔接修改: {len(transition_modifications)}条")
+            for i, mod in enumerate(transition_modifications[:3], 1):  # 只记录前3条修改的详情
+                logger.info(f"  修改{i}: {mod.get('transition_added', '')} - {mod.get('reason', '')[:50]}...")
+            if len(transition_modifications) > 3:
+                logger.info(f"  ... 还有{len(transition_modifications)-3}条修改")
+            self._apply_all_modifications(transition_round_info, transition_modifications)
+            all_applied_modifications.extend(transition_round_info.get("applied_modifications", []))
+            total_modifications += len(transition_modifications)
 
-            # 自动应用所有修改
-            self._apply_all_modifications(round_info, modifications)
+        # 记录综合修改历史
+        self.modification_history.append(
+            {
+                "round": 0,  # 0表示综合润色
+                "round_name": "综合润色",
+                "style": self.selected_style,
+                "modifications_proposed": total_modifications,
+                "modifications_applied": total_modifications,
+                "auto_applied": True,
+                "sentence_structure_count": len(sentence_modifications),
+                "vocabulary_count": len(vocabulary_modifications),
+                "transitions_count": len(transition_modifications),
+                "comprehensive_summary": comprehensive_modifications.get("overall_summary", {}),
+                "applied_modifications": all_applied_modifications  # 添加具体修改内容
+            }
+        )
 
-            # 记录修改历史
-            self.modification_history.append(
-                {
-                    "round": round_info["round"],
-                    "round_name": round_info["name"],
-                    "style": self.selected_style,
-                    "modifications_proposed": len(modifications),
-                    "modifications_applied": len(modifications),
-                    "auto_applied": True,
+        logger.info(f"基于{self.selected_style}风格的综合润色完成，共应用 {total_modifications} 条修改")
+        return {"batch_completed": True, "total_modifications": total_modifications}
+
+    def _generate_comprehensive_modifications(self) -> Dict:
+        """
+        生成综合润色修改建议（一次性完成句式、词汇、段落润色）
+
+        Returns:
+            包含三类修改建议的字典
+        """
+        try:
+            # 获取所有相关规则
+            sentence_rules = self._get_relevant_rules("sentence_structure")
+            vocabulary_rules = self._get_relevant_rules("vocabulary")
+            transition_rules = self._get_relevant_rules("transitions")
+            
+            # 合并所有规则
+            all_rules = sentence_rules + vocabulary_rules + transition_rules
+            
+            if not all_rules:
+                logger.warning("没有找到相关的风格规则")
+                return {
+                    "sentence_structure": {"modifications": [], "summary": {"total_modifications": 0}},
+                    "vocabulary": {"modifications": [], "summary": {"total_modifications": 0}},
+                    "transitions": {"modifications": [], "summary": {"total_modifications": 0}}
                 }
+
+            # 使用综合润色prompt
+            prompt_template = self.prompts.get_comprehensive_polish_prompt()
+            
+            # 格式化prompt
+            prompt = self.prompts.format_prompt(
+                prompt_template,
+                style_rules=json.dumps(all_rules, ensure_ascii=False, indent=2),
+                paper_text=self.current_text
             )
 
-        return {"batch_completed": True}
+            # 记录AI输入
+            logger.info("=== AI输入日志 - 综合润色 ===")
+            logger.info(f"模型: {self.ai_config['model']}")
+            logger.info(f"最大令牌数: {self.ai_config['max_tokens']}")
+            logger.info(f"温度参数: {self.ai_config['temperature']}")
+            logger.info(f"规则数量: {len(all_rules)}")
+            logger.info(f"输入文本长度: {len(self.current_text)} 字符")
+            logger.info("--- 完整Prompt ---")
+            logger.info(prompt)
+            logger.info("--- Prompt结束 ---")
+
+            # 调用AI
+            response = self.client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[
+                    {"role": "system", "content": "你是一个专业的学术写作编辑专家。"},
+                    {"role": "user", "content": prompt}
+                ],
+                # max_tokens=self.ai_config["max_tokens"],
+                temperature=self.ai_config["temperature"]
+            )
+
+            # 解析响应
+            response_text = response.choices[0].message.content
+            
+            # 记录AI输出
+            logger.info("=== AI输出日志 - 综合润色 ===")
+            logger.info(f"响应长度: {len(response_text)} 字符")
+            logger.info(f"使用令牌数: {response.usage.total_tokens if hasattr(response, 'usage') else '未知'}")
+            logger.info("--- 完整响应 ---")
+            logger.info(response_text)
+            logger.info("--- 响应结束 ---")
+            
+            result = self._parse_gpt_response(response_text)
+            
+            if "error" in result:
+                logger.error(f"AI响应解析失败: {result.get('error', '未知错误')}")
+                return {
+                    "sentence_structure": {"modifications": [], "summary": {"total_modifications": 0}},
+                    "vocabulary": {"modifications": [], "summary": {"total_modifications": 0}},
+                    "transitions": {"modifications": [], "summary": {"total_modifications": 0}}
+                }
+
+            # 返回结构化的修改建议
+            return result
+
+        except Exception as e:
+            logger.error(f"生成综合润色修改建议失败: {str(e)}")
+            return {
+                "sentence_structure": {"modifications": [], "summary": {"total_modifications": 0}},
+                "vocabulary": {"modifications": [], "summary": {"total_modifications": 0}},
+                "transitions": {"modifications": [], "summary": {"total_modifications": 0}}
+            }
+
+    def _generate_comprehensive_modifications_with_style(self) -> Dict:
+        """
+        基于风格选择生成综合润色修改建议
+
+        Returns:
+            包含三类修改建议的字典
+        """
+        try:
+            # 获取指定风格的规则
+            sentence_rules = self.style_selector.filter_rules_by_focus(
+                self.selected_style, "sentence_structure"
+            )
+            vocabulary_rules = self.style_selector.filter_rules_by_focus(
+                self.selected_style, "vocabulary"
+            )
+            transition_rules = self.style_selector.filter_rules_by_focus(
+                self.selected_style, "transitions"
+            )
+            
+            # 合并所有规则
+            all_rules = sentence_rules + vocabulary_rules + transition_rules
+            
+            if not all_rules:
+                logger.warning(f"没有找到风格 {self.selected_style} 的相关规则")
+                return {
+                    "sentence_structure": {"modifications": [], "summary": {"total_modifications": 0}},
+                    "vocabulary": {"modifications": [], "summary": {"total_modifications": 0}},
+                    "transitions": {"modifications": [], "summary": {"total_modifications": 0}}
+                }
+
+            # 使用综合润色prompt
+            prompt_template = self.prompts.get_comprehensive_polish_prompt()
+            
+            # 格式化prompt
+            prompt = self.prompts.format_prompt(
+                prompt_template,
+                style_rules=json.dumps(all_rules, ensure_ascii=False, indent=2),
+                paper_text=self.current_text
+            )
+
+            # 记录AI输入
+            logger.info("=== AI输入日志 - 综合润色（带风格） ===")
+            logger.info(f"模型: {self.ai_config['model']}")
+            logger.info(f"最大令牌数: {self.ai_config['max_tokens']}")
+            logger.info(f"温度参数: {self.ai_config['temperature']}")
+            logger.info(f"选择风格: {self.selected_style}")
+            logger.info(f"规则数量: {len(all_rules)}")
+            logger.info(f"输入文本长度: {len(self.current_text)} 字符")
+            logger.info("--- 完整Prompt ---")
+            logger.info(prompt)
+            logger.info("--- Prompt结束 ---")
+
+            # 调用AI
+            response = self.client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[
+                    {"role": "system", "content": f"你是一个专业的学术写作编辑专家，专门使用{self.selected_style}风格进行润色。"},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=8000,
+                temperature=self.ai_config["temperature"]
+            )
+
+            # 解析响应
+            response_text = response.choices[0].message.content
+            
+            # 记录AI输出
+            logger.info("=== AI输出日志 - 综合润色（带风格） ===")
+            logger.info(f"响应长度: {len(response_text)} 字符")
+            logger.info(f"使用令牌数: {response.usage.total_tokens if hasattr(response, 'usage') else '未知'}")
+            logger.info("--- 完整响应 ---")
+            logger.info(response_text)
+            logger.info("--- 响应结束 ---")
+            
+            result = self._parse_gpt_response(response_text)
+            
+            if "error" in result:
+                logger.error(f"AI响应解析失败: {result.get('error', '未知错误')}")
+                return {
+                    "sentence_structure": {"modifications": [], "summary": {"total_modifications": 0}},
+                    "vocabulary": {"modifications": [], "summary": {"total_modifications": 0}},
+                    "transitions": {"modifications": [], "summary": {"total_modifications": 0}}
+                }
+
+            # 返回结构化的修改建议
+            return result
+
+        except Exception as e:
+            logger.error(f"生成基于风格的综合润色修改建议失败: {str(e)}")
+            return {
+                "sentence_structure": {"modifications": [], "summary": {"total_modifications": 0}},
+                "vocabulary": {"modifications": [], "summary": {"total_modifications": 0}},
+                "transitions": {"modifications": [], "summary": {"total_modifications": 0}}
+            }
 
     def _display_style_info(self):
         """显示风格选择信息"""
@@ -760,6 +1085,8 @@ class MultiRoundPolisher:
             round_info: 轮次信息
             modifications: 修改建议列表
         """
+        applied_modifications = []
+        
         for modification in modifications:
             original_text = modification.get("original_text", "")
             modified_text = modification.get("modified_text", "")
@@ -768,7 +1095,25 @@ class MultiRoundPolisher:
                 self.current_text = self.current_text.replace(
                     original_text, modified_text, 1
                 )
+                
+                # 保存详细的修改信息
+                applied_mod = {
+                    "modification_id": modification.get("modification_id", ""),
+                    "original_text": original_text,
+                    "modified_text": modified_text,
+                    "reason": modification.get("reason", ""),
+                    "rule_applied": modification.get("rule_applied", ""),
+                    "rule_evidence": modification.get("rule_evidence", ""),
+                    "position": modification.get("position", ""),
+                    "word_changed": modification.get("word_changed", ""),
+                    "transition_added": modification.get("transition_added", "")
+                }
+                applied_modifications.append(applied_mod)
+                
                 logger.info(f"自动应用修改: {original_text[:50]}...")
+        
+        # 将应用的修改详情保存到round_info中，供后续使用
+        round_info["applied_modifications"] = applied_modifications
 
     def _parse_gpt_response(self, response_text: str) -> Dict:
         """
@@ -791,12 +1136,120 @@ class MultiRoundPolisher:
                 json_end = response_text.rfind("}") + 1
                 json_text = response_text[json_start:json_end]
 
+            # 尝试修复常见的JSON格式问题
+            json_text = self._fix_json_format(json_text)
+            
             return json.loads(json_text)
 
         except (json.JSONDecodeError, ValueError) as e:
             logger.error(f"解析GPT响应失败: {str(e)}")
             logger.error(f"响应文本: {response_text[:500]}...")
+            logger.error(f"尝试修复后的JSON: {json_text[:500]}...")
             return {"error": str(e)}
+
+    def _fix_json_format(self, json_text: str) -> str:
+        """
+        修复常见的JSON格式问题
+        
+        Args:
+            json_text: 原始JSON文本
+            
+        Returns:
+            修复后的JSON文本
+        """
+        # 移除末尾的逗号
+        json_text = re.sub(r',\s*}', '}', json_text)
+        json_text = re.sub(r',\s*]', ']', json_text)
+        
+        # 修复未完成的字符串
+        # 查找未闭合的字符串
+        lines = json_text.split('\n')
+        fixed_lines = []
+        
+        for line in lines:
+            # 检查是否有未完成的字符串（以引号开头但没有结尾引号）
+            if line.strip().startswith('"') and not line.strip().endswith('",') and not line.strip().endswith('"'):
+                # 尝试修复未完成的字符串
+                if '"modified_text":' in line:
+                    # 对于未完成的modified_text，添加占位符
+                    line = line + ' "[INCOMPLETE_RESPONSE]"'
+                elif '"reason":' in line:
+                    line = line + ' "Incomplete response"'
+                elif '"rule_evidence":' in line:
+                    line = line + ' "N/A"'
+            
+            fixed_lines.append(line)
+        
+        return '\n'.join(fixed_lines)
+
+    def _simple_polish_with_style(self) -> str:
+        """
+        简洁润色处理（只返回润色后的文本）
+
+        Returns:
+            润色后的文本
+        """
+        try:
+            # 直接加载完整的混合风格指南
+            style_guide_path = Path("data/hybrid_style_guide.json")
+            if not style_guide_path.exists():
+                logger.warning("混合风格指南不存在，返回原文")
+                return self.current_text
+            
+            with open(style_guide_path, 'r', encoding='utf-8') as f:
+                style_guide = json.load(f)
+            
+            logger.info(f"加载完整混合风格指南，包含 {style_guide.get('total_rules', 0)} 条规则")
+
+            # 使用简洁润色prompt
+            prompt_template = self.prompts.get_simple_polish_prompt()
+            
+            # 格式化prompt，使用完整的风格指南
+            prompt = self.prompts.format_prompt(
+                prompt_template,
+                style_rules=json.dumps(style_guide, ensure_ascii=False, indent=2),
+                paper_text=self.current_text
+            )
+
+            # 记录AI输入
+            logger.info("=== AI输入日志 - 简洁润色（完整风格指南） ===")
+            logger.info(f"模型: {self.ai_config['model']}")
+            logger.info(f"最大令牌数: {self.ai_config['max_tokens']}")
+            logger.info(f"温度参数: {self.ai_config['temperature']}")
+            logger.info(f"选择风格: {self.selected_style}")
+            logger.info(f"使用完整混合风格指南: {style_guide.get('total_rules', 0)} 条规则")
+            logger.info(f"输入文本长度: {len(self.current_text)} 字符")
+            logger.info("--- 完整Prompt ---")
+            logger.info(prompt)
+            logger.info("--- Prompt结束 ---")
+
+            # 调用AI
+            response = self.client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[
+                    {"role": "system", "content": f"你是一个专业的学术写作编辑专家，专门使用{self.selected_style}风格进行润色。"},
+                    {"role": "user", "content": prompt}
+                ],
+                # max_tokens=self.ai_config["max_tokens"],
+                temperature=self.ai_config["temperature"]
+            )
+
+            # 获取润色后的文本
+            polished_text = response.choices[0].message.content.strip()
+            
+            # 记录AI输出
+            logger.info("=== AI输出日志 - 简洁润色（完整风格指南） ===")
+            logger.info(f"响应长度: {len(polished_text)} 字符")
+            logger.info(f"使用令牌数: {response.usage.total_tokens if hasattr(response, 'usage') else '未知'}")
+            logger.info("--- 润色后文本 ---")
+            logger.info(polished_text[:200] + "..." if len(polished_text) > 200 else polished_text)
+            logger.info("--- 文本结束 ---")
+            
+            return polished_text
+
+        except Exception as e:
+            logger.error(f"简洁润色处理失败: {str(e)}")
+            return self.current_text
 
     def _generate_polishing_summary(self) -> Dict:
         """

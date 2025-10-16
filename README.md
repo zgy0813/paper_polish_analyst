@@ -542,7 +542,6 @@ export DEEPSEEK_API_KEY="your_deepseek_key"     # 或使用DeepSeek
 export AI_PROVIDER="openai"                     # AI提供商选择（openai/deepseek）
 export BATCH_SIZE=10                            # 批次大小
 export MAX_PAPERS=100                           # 最大论文数
-export SIMILARITY_THRESHOLD=0.9                 # 相似度阈值
 export AI_TEMPERATURE=0.3                       # AI生成温度
 ```
 
@@ -554,7 +553,6 @@ export AI_TEMPERATURE=0.3                       # AI生成温度
 # 分析配置
 BATCH_SIZE = 10                    # 每批分析的论文数量
 MAX_PAPERS = 100                   # 最大分析论文数量
-SIMILARITY_THRESHOLD = 0.9         # 相似度阈值（停止分析条件）
 
 # 规则分类阈值
 CORE_RULE_THRESHOLD = 0.8          # 核心规则阈值（80%+论文遵循）

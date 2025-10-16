@@ -518,6 +518,115 @@ User's Paper (after Round 2 modifications):
 """
 
     @staticmethod
+    def get_comprehensive_polish_prompt() -> str:
+        """获取综合润色的prompt（一次性完成句式、词汇、段落润色）"""
+        return """
+You are an expert academic writing editor. Your task is to comprehensively polish the provided academic paper in one pass, addressing three key areas simultaneously:
+
+**Comprehensive Polishing Requirements:**
+
+1. **Sentence Structure Adjustment**:
+   - Improve sentence clarity and flow
+   - Adjust sentence length and complexity
+   - Enhance grammatical structure
+   - Apply sentence structure rules from the style guide
+
+2. **Vocabulary Optimization**:
+   - Replace informal or imprecise words with academic vocabulary
+   - Ensure consistent terminology usage
+   - Improve word choice for clarity and precision
+   - Apply vocabulary rules from the style guide
+
+3. **Transition and Coherence Improvement**:
+   - Enhance paragraph transitions
+   - Improve logical flow between sentences
+   - Add or improve transitional phrases
+   - Strengthen overall coherence
+
+**Important Guidelines:**
+- Make all three types of improvements in one comprehensive pass
+- Maintain the original meaning and academic tone
+- Apply relevant rules from the provided style guide
+- Provide clear rationale for each modification
+- Ensure modifications work together harmoniously
+
+Please output comprehensive modification suggestions in JSON format:
+
+```json
+{{
+  "sentence_structure": {{
+    "modifications": [
+      {{
+        "modification_id": "sent_001",
+        "original_text": "Original sentence",
+        "modified_text": "Improved sentence",
+        "position": "Paragraph X, Sentence Y",
+        "reason": "Sentence structure improvement rationale",
+        "rule_applied": "Rule ID",
+        "rule_evidence": "Rule evidence"
+      }}
+    ],
+    "summary": {{
+      "total_modifications": 0,
+      "rules_applied": ["Rule ID1", "Rule ID2"],
+      "improvement_description": "Overall sentence structure improvements"
+    }}
+  }},
+  "vocabulary": {{
+    "modifications": [
+      {{
+        "modification_id": "vocab_001",
+        "original_text": "Sentence with original vocabulary",
+        "modified_text": "Sentence with improved vocabulary",
+        "position": "Paragraph X, Sentence Y",
+        "word_changed": "original word → improved word",
+        "reason": "Vocabulary improvement rationale",
+        "rule_applied": "Rule ID",
+        "rule_evidence": "Rule evidence"
+      }}
+    ],
+    "summary": {{
+      "total_modifications": 0,
+      "words_replaced": ["word1", "word2"],
+      "rules_applied": ["Rule ID1", "Rule ID2"]
+    }}
+  }},
+  "transitions": {{
+    "modifications": [
+      {{
+        "modification_id": "trans_001",
+        "original_text": "Sentence with poor transition",
+        "modified_text": "Sentence with improved transition",
+        "position": "Paragraph X, Sentence Y",
+        "transition_added": "transitional phrase",
+        "reason": "Transition improvement rationale",
+        "rule_applied": "Rule ID",
+        "rule_evidence": "Rule evidence"
+      }}
+    ],
+    "summary": {{
+      "total_modifications": 0,
+      "transitions_added": ["transition1", "transition2"],
+      "rules_applied": ["Rule ID1", "Rule ID2"]
+    }}
+  }},
+  "overall_summary": {{
+    "total_modifications": 0,
+    "categories_improved": ["sentence_structure", "vocabulary", "transitions"],
+    "rules_applied": ["Rule ID1", "Rule ID2", "Rule ID3"],
+    "overall_improvement": "Comprehensive description of all improvements made"
+  }}
+}}
+```
+
+Style Rules:
+{style_rules}
+
+User's Paper:
+{paper_text}
+"""
+
+    @staticmethod
     def get_quality_assessment_prompt() -> str:
         """获取质量评估的prompt"""
         return """
@@ -569,6 +678,27 @@ Please output the evaluation results in JSON format:
 ```
 
 Paper Text:
+{paper_text}
+"""
+
+    @staticmethod
+    def get_simple_polish_prompt() -> str:
+        """获取简洁润色提示词（只返回润色后的文本）"""
+        return """
+You are an expert academic writing editor. Please polish the following paper according to the provided style guide rules.
+
+**Style Rules to Apply:**
+{style_rules}
+
+**Requirements:**
+- Apply the style guide rules to improve the paper
+- Focus on sentence structure, vocabulary, and transitions
+- Maintain the original meaning and academic tone
+- Ensure proper academic writing standards
+
+**Important:** Return ONLY the polished text. Do not include any explanations, modifications list, or JSON format. Just return the complete polished version of the paper.
+
+Paper to polish:
 {paper_text}
 """
 

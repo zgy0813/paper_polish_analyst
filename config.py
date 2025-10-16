@@ -41,9 +41,6 @@ class Config:
     MAX_BATCHES_FOR_DIVERSITY = int(os.getenv('MAX_BATCHES_FOR_DIVERSITY', '15'))   # 最多批次数 (从10改为15)
     RULE_DIVERSITY_THRESHOLD = float(os.getenv('RULE_DIVERSITY_THRESHOLD', '0.9'))  # 规则多样性阈值 (从0.7改为0.9)
     
-    # 废弃的相似性阈值 (保留用于向后兼容)
-    SIMILARITY_THRESHOLD = float(os.getenv('SIMILARITY_THRESHOLD', '0.9'))  # 已废弃，不再使用
-    
     # 文件路径配置
     DATA_DIR = os.getenv('DATA_DIR', 'data')
     JOURNALS_DIR = os.path.join(DATA_DIR, 'journals')

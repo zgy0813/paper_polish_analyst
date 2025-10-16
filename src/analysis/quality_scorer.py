@@ -7,10 +7,8 @@
 import re
 from typing import Dict, List
 import json
-from openai import OpenAI
 
 from ..utils.nlp_utils import NLPUtils
-from ..core.prompts import PromptTemplates
 from config import Config
 
 # 设置日志
@@ -25,18 +23,8 @@ class QualityScorer:
     def __init__(self):
         """初始化评分器"""
         self.nlp_utils = NLPUtils()
-        try:
-            ai_config = Config.get_ai_config()
-            self.client = OpenAI(
-                api_key=ai_config["api_key"], base_url=ai_config["base_url"]
-            )
-            self.prompts = PromptTemplates()
-            self.ai_config = ai_config
-        except Exception:
-            self.client = None
-            self.prompts = None
-            self.ai_config = None
         self.style_guide = {}
+        logger.info("质量评分器初始化完成（纯NLP模式）")
 
     def load_style_guide(self) -> bool:
         """
@@ -256,7 +244,7 @@ class QualityScorer:
 
     def _calculate_academic_standard_score(self, paper_text: str) -> Dict:
         """
-        计算学术规范性评分
+        计算学术规范性评分（基于NLP指标）
 
         Args:
             paper_text: 论文文本
@@ -265,102 +253,119 @@ class QualityScorer:
             学术规范性评分结果
         """
         try:
-            # 如果OpenAI不可用，直接使用NLP指标
-            if not self.client or not self.prompts:
-                nlp_analysis = self.nlp_utils.analyze_academic_expression(paper_text)
-
-                # 基于NLP指标计算分数
-                passive_score = min(
-                    nlp_analysis.get("passive_voice_ratio", 0) * 100, 30
-                )
-                first_person_score = max(
-                    0,
-                    20
-                    - nlp_analysis.get("first_person_usage", {}).get(
-                        "first_person_ratio", 0
-                    )
-                    * 100,
-                )
-
-                total_score = passive_score + first_person_score + 50  # 基础分50
-
-                return {
-                    "score": min(total_score, 100),
-                    "description": "基于NLP指标评估",
-                    "passive_voice_score": passive_score,
-                    "first_person_score": first_person_score,
-                }
-
-            # 使用AI进行学术规范性评估
-            prompt = self.prompts.format_prompt(
-                self.prompts.get_quality_assessment_prompt(),
-                paper_text=paper_text,  # 使用完整文本
-            )
-
-            # 记录AI请求参数
-            request_params = {
-                "model": self.ai_config["model"],
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 2000,
-                "temperature": self.ai_config["temperature"],
+            logger.info("开始基于NLP指标计算学术规范性评分")
+            
+            # 获取多种NLP分析结果
+            academic_analysis = self.nlp_utils.analyze_academic_expression(paper_text)
+            sentence_analysis = self.nlp_utils.analyze_sentence_structure(paper_text)
+            vocab_analysis = self.nlp_utils.analyze_vocabulary(paper_text)
+            
+            # 1. 被动语态评分（适度使用被动语态，比例在0.1-0.3之间为最佳）
+            passive_ratio = academic_analysis.get("passive_voice_ratio", 0)
+            if 0.1 <= passive_ratio <= 0.3:
+                passive_score = 100
+            elif passive_ratio < 0.1:
+                passive_score = 60 + passive_ratio * 400  # 0-0.1映射到60-100
+            else:
+                passive_score = max(0, 100 - (passive_ratio - 0.3) * 300)  # 0.3以上递减
+            
+            # 2. 第一人称使用评分（学术写作中应适度使用）
+            first_person_ratio = academic_analysis.get("first_person_usage", {}).get("first_person_ratio", 0)
+            if first_person_ratio <= 0.05:
+                first_person_score = 100
+            elif first_person_ratio <= 0.15:
+                first_person_score = 80
+            else:
+                first_person_score = max(0, 80 - (first_person_ratio - 0.15) * 400)
+            
+            # 3. 学术词汇比例评分
+            academic_word_ratio = vocab_analysis.get("academic_word_ratio", 0)
+            if academic_word_ratio >= 0.05:
+                academic_vocab_score = min(100, 60 + academic_word_ratio * 800)
+            else:
+                academic_vocab_score = academic_word_ratio * 1200
+            
+            # 4. 句子复杂度评分（适度的复杂度）
+            avg_sentence_length = sentence_analysis.get("avg_sentence_length", 20)
+            if 15 <= avg_sentence_length <= 25:
+                complexity_score = 100
+            elif avg_sentence_length < 15:
+                complexity_score = 60 + avg_sentence_length * 2.67
+            else:
+                complexity_score = max(0, 100 - (avg_sentence_length - 25) * 4)
+            
+            # 5. 词汇多样性评分
+            vocab_richness = vocab_analysis.get("vocabulary_richness", 0)
+            diversity_score = min(100, vocab_richness * 300)
+            
+            # 6. 连接词使用评分
+            transition_words = ["however", "therefore", "furthermore", "moreover", "consequently", "nevertheless"]
+            transition_count = sum(paper_text.lower().count(word) for word in transition_words)
+            word_count = len(paper_text.split())
+            transition_ratio = transition_count / word_count if word_count > 0 else 0
+            
+            if 0.01 <= transition_ratio <= 0.03:
+                transition_score = 100
+            else:
+                transition_score = max(0, 100 - abs(transition_ratio - 0.02) * 5000)
+            
+            # 加权计算总分
+            weights = {
+                "passive": 0.25,
+                "first_person": 0.15,
+                "academic_vocab": 0.20,
+                "complexity": 0.15,
+                "diversity": 0.15,
+                "transitions": 0.10
             }
-            logger.info(f"质量评估AI请求参数: {request_params}")
-            logger.info(f"质量评估Prompt长度: {len(prompt)} 字符")
-
-            response = self.client.chat.completions.create(
-                model=self.ai_config["model"],
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=2000,
-                temperature=self.ai_config["temperature"],
+            
+            total_score = (
+                passive_score * weights["passive"] +
+                first_person_score * weights["first_person"] +
+                academic_vocab_score * weights["academic_vocab"] +
+                complexity_score * weights["complexity"] +
+                diversity_score * weights["diversity"] +
+                transition_score * weights["transitions"]
             )
-
-            # 记录AI响应参数
-            response_content = response.choices[0].message.content
-            logger.info(
-                f"质量评估AI响应参数: model={response.model}, usage={response.usage}, finish_reason={response.choices[0].finish_reason}"
-            )
-            logger.info(f"质量评估AI响应内容长度: {len(response_content)} 字符")
-            logger.info(f"质量评估AI完整响应内容: {response_content}")
-
-            # 解析GPT响应
-            gpt_result = self._parse_gpt_response(response.choices[0].message.content)
-
-            # 提取学术规范性评分
-            academic_score = gpt_result.get("assessment", {}).get(
-                "academic_standard", {}
-            )
-
-            # 如果没有GPT结果，使用NLP指标
-            if not academic_score:
-                nlp_analysis = self.nlp_utils.analyze_academic_expression(paper_text)
-
-                # 基于NLP指标计算分数
-                passive_score = min(
-                    nlp_analysis.get("passive_voice_ratio", 0) * 100, 30
-                )
-                first_person_score = max(
-                    0,
-                    20
-                    - nlp_analysis.get("first_person_usage", {}).get(
-                        "first_person_ratio", 0
-                    )
-                    * 100,
-                )
-
-                total_score = passive_score + first_person_score + 50  # 基础分50
-
-                academic_score = {
-                    "score": min(total_score, 100),
-                    "description": "基于NLP指标评估",
-                    "passive_voice_score": passive_score,
-                    "first_person_score": first_person_score,
+            
+            # 生成详细描述
+            descriptions = []
+            if passive_score >= 80:
+                descriptions.append("被动语态使用恰当")
+            if first_person_score >= 80:
+                descriptions.append("第一人称使用适度")
+            if academic_vocab_score >= 80:
+                descriptions.append("学术词汇丰富")
+            if complexity_score >= 80:
+                descriptions.append("句子复杂度适中")
+            if diversity_score >= 80:
+                descriptions.append("词汇多样性良好")
+            if transition_score >= 80:
+                descriptions.append("连接词使用恰当")
+            
+            description = "基于NLP指标评估" + ("，" + "，".join(descriptions) if descriptions else "")
+            
+            return {
+                "score": round(total_score, 1),
+                "description": description,
+                "details": {
+                    "passive_voice_score": round(passive_score, 1),
+                    "passive_voice_ratio": round(passive_ratio, 3),
+                    "first_person_score": round(first_person_score, 1),
+                    "first_person_ratio": round(first_person_ratio, 3),
+                    "academic_vocab_score": round(academic_vocab_score, 1),
+                    "academic_word_ratio": round(academic_word_ratio, 3),
+                    "complexity_score": round(complexity_score, 1),
+                    "avg_sentence_length": round(avg_sentence_length, 1),
+                    "diversity_score": round(diversity_score, 1),
+                    "vocab_richness": round(vocab_richness, 3),
+                    "transition_score": round(transition_score, 1),
+                    "transition_ratio": round(transition_ratio, 3)
                 }
-
-            return academic_score
+            }
 
         except Exception as e:
             logger.error(f"计算学术规范性评分失败: {str(e)}")
-            # 返回默认评分
             return {
                 "score": 70,
                 "description": "评估失败，使用默认分数",
@@ -369,7 +374,7 @@ class QualityScorer:
 
     def _calculate_readability_score(self, paper_text: str) -> Dict:
         """
-        计算可读性评分
+        计算可读性评分（增强版NLP指标）
 
         Args:
             paper_text: 论文文本
@@ -378,41 +383,134 @@ class QualityScorer:
             可读性评分结果
         """
         try:
-            # 使用NLP工具计算可读性
+            logger.info("开始基于增强NLP指标计算可读性评分")
+            
+            # 获取多种NLP分析结果
             sentence_analysis = self.nlp_utils.analyze_sentence_structure(paper_text)
             vocab_analysis = self.nlp_utils.analyze_vocabulary(paper_text)
+            academic_analysis = self.nlp_utils.analyze_academic_expression(paper_text)
 
-            # 句长评分（理想范围10-25词）
+            # 1. 句长评分（学术写作理想范围15-25词）
             avg_sentence_length = sentence_analysis.get("avg_sentence_length", 20)
-            if 10 <= avg_sentence_length <= 25:
+            if 15 <= avg_sentence_length <= 25:
                 length_score = 100
+            elif avg_sentence_length < 15:
+                length_score = 70 + avg_sentence_length * 2  # 15以下映射到70-100
             else:
-                length_score = max(0, 100 - abs(avg_sentence_length - 17.5) * 4)
+                length_score = max(0, 100 - (avg_sentence_length - 25) * 3)  # 25以上递减
 
-            # 句长变化评分（适度的变化是好的）
+            # 2. 句长变化评分（适度的变化是好的）
             length_variance = sentence_analysis.get("sentence_length_variance", 0)
-            variance_score = min(100, max(0, 100 - length_variance * 2))
+            if 0.2 <= length_variance <= 0.6:
+                variance_score = 100
+            else:
+                variance_score = max(0, 100 - abs(length_variance - 0.4) * 200)
 
-            # 词汇丰富度评分
+            # 3. 词汇丰富度评分
             vocab_richness = vocab_analysis.get("vocabulary_richness", 0)
-            richness_score = min(100, vocab_richness * 200)
+            if vocab_richness >= 0.6:
+                richness_score = 100
+            else:
+                richness_score = vocab_richness * 166.67  # 映射到0-100
 
-            # 综合可读性评分
-            readability_score = (
-                length_score * 0.5 + variance_score * 0.3 + richness_score * 0.2
+            # 4. 复合句比例评分
+            compound_ratio = sentence_analysis.get("compound_sentence_ratio", 0)
+            if 0.3 <= compound_ratio <= 0.7:
+                compound_score = 100
+            elif compound_ratio < 0.3:
+                compound_score = 60 + compound_ratio * 133.33
+            else:
+                compound_score = max(0, 100 - (compound_ratio - 0.7) * 333.33)
+
+            # 5. 词汇复杂度评分（基于学术词汇比例）
+            academic_word_ratio = vocab_analysis.get("academic_word_ratio", 0)
+            if 0.05 <= academic_word_ratio <= 0.15:
+                complexity_score = 100
+            elif academic_word_ratio < 0.05:
+                complexity_score = academic_word_ratio * 2000
+            else:
+                complexity_score = max(0, 100 - (academic_word_ratio - 0.15) * 500)
+
+            # 6. 段落结构评分（基于句子数量）
+            sentences = sentence_analysis.get("sentence_count", 0)
+            words = len(paper_text.split())
+            if words > 0:
+                sentences_per_word = sentences / words * 1000  # 每千词的句子数
+                if 15 <= sentences_per_word <= 35:
+                    structure_score = 100
+                else:
+                    structure_score = max(0, 100 - abs(sentences_per_word - 25) * 5)
+            else:
+                structure_score = 50
+
+            # 7. 连接词密度评分
+            transition_words = ["however", "therefore", "furthermore", "moreover", "consequently", "nevertheless", "meanwhile", "additionally"]
+            transition_count = sum(paper_text.lower().count(word) for word in transition_words)
+            word_count = len(paper_text.split())
+            transition_density = transition_count / word_count if word_count > 0 else 0
+            
+            if 0.01 <= transition_density <= 0.03:
+                transition_score = 100
+            else:
+                transition_score = max(0, 100 - abs(transition_density - 0.02) * 5000)
+
+            # 加权计算总分
+            weights = {
+                "length": 0.25,
+                "variance": 0.15,
+                "richness": 0.20,
+                "compound": 0.15,
+                "complexity": 0.15,
+                "structure": 0.05,
+                "transition": 0.05
+            }
+
+            total_score = (
+                length_score * weights["length"] +
+                variance_score * weights["variance"] +
+                richness_score * weights["richness"] +
+                compound_score * weights["compound"] +
+                complexity_score * weights["complexity"] +
+                structure_score * weights["structure"] +
+                transition_score * weights["transition"]
             )
 
+            # 生成详细描述
+            descriptions = []
+            if length_score >= 80:
+                descriptions.append("句子长度适中")
+            if variance_score >= 80:
+                descriptions.append("句式变化丰富")
+            if richness_score >= 80:
+                descriptions.append("词汇丰富多样")
+            if compound_score >= 80:
+                descriptions.append("复合句使用恰当")
+            if complexity_score >= 80:
+                descriptions.append("词汇复杂度适中")
+            if transition_score >= 80:
+                descriptions.append("连接词使用恰当")
+
+            description = "基于增强NLP指标评估" + ("，" + "，".join(descriptions) if descriptions else "")
+
             return {
-                "score": round(readability_score, 1),
-                "description": "基于句式和词汇分析",
-                "sentence_length_score": round(length_score, 1),
-                "sentence_variation_score": round(variance_score, 1),
-                "vocabulary_richness_score": round(richness_score, 1),
+                "score": round(total_score, 1),
+                "description": description,
                 "details": {
+                    "sentence_length_score": round(length_score, 1),
                     "avg_sentence_length": round(avg_sentence_length, 1),
+                    "sentence_variation_score": round(variance_score, 1),
                     "sentence_variance": round(length_variance, 2),
+                    "vocabulary_richness_score": round(richness_score, 1),
                     "vocabulary_richness": round(vocab_richness, 3),
-                },
+                    "compound_sentence_score": round(compound_score, 1),
+                    "compound_sentence_ratio": round(compound_ratio, 3),
+                    "complexity_score": round(complexity_score, 1),
+                    "academic_word_ratio": round(academic_word_ratio, 3),
+                    "structure_score": round(structure_score, 1),
+                    "sentences_per_1000_words": round(sentences_per_word if words > 0 else 0, 1),
+                    "transition_score": round(transition_score, 1),
+                    "transition_density": round(transition_density, 3)
+                }
             }
 
         except Exception as e:
@@ -521,32 +619,6 @@ class QualityScorer:
 
         return recommendations[:5]  # 最多5条建议
 
-    def _parse_gpt_response(self, response_text: str) -> Dict:
-        """
-        解析GPT响应
-
-        Args:
-            response_text: GPT响应文本
-
-        Returns:
-            解析后的JSON对象
-        """
-        try:
-            # 尝试提取JSON部分
-            if "```json" in response_text:
-                json_start = response_text.find("```json") + 7
-                json_end = response_text.find("```", json_start)
-                json_text = response_text[json_start:json_end].strip()
-            else:
-                json_start = response_text.find("{")
-                json_end = response_text.rfind("}") + 1
-                json_text = response_text[json_start:json_end]
-
-            return json.loads(json_text)
-
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.error(f"解析GPT响应失败: {str(e)}")
-            return {}
 
     def compare_scores(self, before_scores: Dict, after_scores: Dict) -> Dict:
         """

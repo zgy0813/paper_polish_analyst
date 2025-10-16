@@ -69,6 +69,20 @@ st.markdown("""
         background-color: #fff3cd;
         border-left: 4px solid #ffc107;
     }
+    /* 限制selectbox宽度 */
+    .stSelectbox > div > div {
+        max-width: 150px !important;
+        width: 150px !important;
+    }
+    /* 限制selectbox容器宽度 */
+    .stSelectbox {
+        max-width: 150px !important;
+        width: 150px !important;
+    }
+    /* 针对润色风格selectbox的特殊样式 */
+    .stSelectbox label {
+        font-size: 0.9rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -138,7 +152,7 @@ def paper_polishing_interface():
     st.markdown('<div class="section-header">📝 论文润色</div>', unsafe_allow_html=True)
     
     # 输入方式选择
-    input_method = st.radio("选择输入方式:", ["直接输入", "上传文件"])
+    input_method = st.radio("选择输入方式:", ["直接输入", "上传文件"], horizontal=True)
     
     paper_text = ""
     
@@ -160,14 +174,33 @@ def paper_polishing_interface():
             st.success(f"✅ 文件已上传: {uploaded_file.name}")
     
     if paper_text:
-        # 润色选项
-        col1, col2 = st.columns(2)
+        # 润色选项 - 使用不均匀列宽让控件更靠近
+        col1, col2 = st.columns([1.2, 0.8])
         
         with col1:
-            interactive_mode = st.checkbox("交互模式", value=True, help="逐轮确认修改建议")
+            style_options = {
+                "平衡": "balanced",
+                "保守": "conservative", 
+                "创新": "innovative",
+                "自动": "auto"
+            }
+            
+            style_display = st.selectbox(
+                "润色风格",
+                list(style_options.keys()),
+                index=0,
+                help="选择润色风格：平衡、保守、创新或自动推荐"
+            )
+            style_choice = style_options[style_display]
         
         with col2:
-            show_scores = st.checkbox("显示评分对比", value=True, help="显示润色前后的质量评分")
+            output_mode = st.radio(
+                "输出模式",
+                ["简洁输出", "完整输出"],  # 调整顺序，简洁输出在前
+                index=0,  # 默认选择第一个选项（简洁输出）
+                horizontal=True,
+                help="简洁输出只显示润色后文本，完整输出显示修改详情"
+            )
         
         # 润色按钮
         if st.button("🚀 开始润色", type="primary"):
@@ -176,40 +209,59 @@ def paper_polishing_interface():
                     # 创建润色器
                     polisher = MultiRoundPolisher()
                     
-                    # 执行润色
-                    result = polisher.polish_paper(paper_text, interactive=interactive_mode)
+                    # 根据输出模式执行不同的润色方法
+                    if output_mode == "简洁输出":
+                        result = polisher.polish_paper_simple(paper_text, style=style_choice)
+                    else:
+                        result = polisher.polish_paper(paper_text, style=style_choice)
                     
                     if result.get('success', False):
                         # 显示润色结果
-                        display_polishing_results(result, show_scores)
+                        display_polishing_results(result, False)
                     else:
                         st.error(f"❌ 润色失败: {result.get('error', '未知错误')}")
                         
                 except Exception as e:
                     st.error(f"❌ 润色过程中出现错误: {str(e)}")
 
+def get_style_display_name(style_key):
+    """将英文风格键转换为中文显示名称"""
+    style_display_map = {
+        'balanced': '平衡',
+        'conservative': '保守',
+        'innovative': '创新', 
+        'auto': '自动'
+    }
+    return style_display_map.get(style_key, style_key.title())
+
 def display_polishing_results(result, show_scores):
     """显示润色结果"""
     st.markdown('<div class="section-header">✨ 润色结果</div>', unsafe_allow_html=True)
     
-    # 评分对比
-    if show_scores and 'score_comparison' in result:
-        display_score_comparison(result['score_comparison'])
+    # 检查是否为简洁模式
+    is_simple_mode = result.get('simple_mode', False)
     
-    # 修改统计
-    summary = result.get('polishing_summary', {})
-    if summary:
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("润色轮数", summary.get('total_rounds', 0))
-        
-        with col2:
-            st.metric("应用修改", f"{summary.get('total_modifications_applied', 0)} 处")
-        
-        with col3:
-            mode = "交互模式" if summary.get('interactive_mode') else "批量模式"
-            st.metric("润色模式", mode)
+    if not is_simple_mode:
+        # 完整模式：显示修改统计
+        summary = result.get('polishing_summary', {})
+        if summary:
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("润色轮数", summary.get('total_rounds', 0))
+            
+            with col2:
+                st.metric("应用修改", f"{summary.get('total_modifications_applied', 0)} 处")
+            
+            with col3:
+                style_used = summary.get('style_used', 'balanced')
+                style_display = get_style_display_name(style_used)
+                st.metric("润色风格", style_display)
+    else:
+        # 简洁模式：只显示基本信息
+        style_used = result.get('style_used', 'balanced')
+        style_display = get_style_display_name(style_used)
+        st.info(f"📝 使用 {style_display} 进行润色")
     
     # 润色后的文本
     st.markdown('<div class="section-header">📄 润色后的论文</div>', unsafe_allow_html=True)
@@ -231,80 +283,97 @@ def display_polishing_results(result, show_scores):
             mime="text/plain"
         )
     
-    # 修改详情
-    modification_history = result.get('modification_history', [])
-    if modification_history:
-        st.markdown('<div class="section-header">📝 修改详情</div>', unsafe_allow_html=True)
-        
-        for round_info in modification_history:
-            with st.expander(f"第{round_info['round']}轮: {round_info['round_name']} ({round_info['modifications_applied']}处修改)"):
-                st.text(f"修改数量: {round_info['modifications_applied']}")
+    # 修改详情（仅完整模式显示）
+    if not is_simple_mode:
+        modification_history = result.get('modification_history', [])
+        if modification_history:
+            st.markdown('<div class="section-header">📝 修改详情</div>', unsafe_allow_html=True)
+            
+            for round_info in modification_history:
+                round_title = f"第{round_info['round']}轮: {round_info['round_name']} ({round_info['modifications_applied']}处修改)"
+                if round_info.get('round') == 0:
+                    round_title = f"{round_info['round_name']} ({round_info['modifications_applied']}处修改)"
                 
-                if 'user_choices' in round_info:
-                    choices = round_info['user_choices']
-                    st.text(f"接受的修改: {len(choices.get('accepted', []))}")
-                    st.text(f"拒绝的修改: {len(choices.get('rejected', []))}")
+                with st.expander(round_title):
+                    # 显示修改统计
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.text(f"修改数量: {round_info['modifications_applied']}")
+                        if 'sentence_structure_count' in round_info:
+                            st.text(f"句式结构: {round_info['sentence_structure_count']}处")
+                            st.text(f"词汇优化: {round_info['vocabulary_count']}处")
+                            st.text(f"段落衔接: {round_info['transitions_count']}处")
+                    
+                    with col2:
+                        if 'style' in round_info:
+                            st.text(f"使用风格: {round_info['style']}")
+                        if 'auto_applied' in round_info:
+                            st.text("应用方式: 自动应用")
+                    
+                    # 显示具体修改内容
+                    applied_modifications = round_info.get('applied_modifications', [])
+                    if applied_modifications:
+                        st.markdown("**具体修改内容:**")
+                        
+                        for i, mod in enumerate(applied_modifications, 1):
+                            with st.container():
+                                st.markdown(f"**修改 {i}:**")
+                                
+                                # 显示原文和修改后的文本
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.text_area(
+                                        "原文:",
+                                        value=mod.get('original_text', ''),
+                                        height=60,
+                                        key=f"original_{round_info['round']}_{i}",
+                                        disabled=True
+                                    )
+                                with col2:
+                                    st.text_area(
+                                        "修改后:",
+                                        value=mod.get('modified_text', ''),
+                                        height=60,
+                                        key=f"modified_{round_info['round']}_{i}",
+                                        disabled=True
+                                    )
+                                
+                                # 显示修改原因和规则
+                                if mod.get('reason'):
+                                    st.markdown(f"**修改原因:** {mod.get('reason', '')}")
+                                
+                                if mod.get('rule_applied'):
+                                    st.markdown(f"**应用规则:** {mod.get('rule_applied', '')}")
+                                
+                                if mod.get('word_changed'):
+                                    st.markdown(f"**词汇变化:** {mod.get('word_changed', '')}")
+                                
+                                if mod.get('transition_added'):
+                                    st.markdown(f"**添加连接词:** {mod.get('transition_added', '')}")
+                                
+                                if mod.get('position'):
+                                    st.markdown(f"**位置:** {mod.get('position', '')}")
+                                
+                                st.markdown("---")
+                    
+                    # 显示用户选择（如果是交互模式）
+                    if 'user_choices' in round_info:
+                        choices = round_info['user_choices']
+                        st.markdown("**用户选择:**")
+                        st.text(f"接受的修改: {len(choices.get('accepted', []))}")
+                        st.text(f"拒绝的修改: {len(choices.get('rejected', []))}")
+                    
+                    # 显示综合摘要
+                    if 'comprehensive_summary' in round_info:
+                        summary = round_info['comprehensive_summary']
+                        if summary:
+                            st.markdown("**润色摘要:**")
+                            if summary.get('overall_improvement'):
+                                st.text(f"整体改进: {summary.get('overall_improvement', '')}")
+                            if summary.get('rules_applied'):
+                                rules = summary.get('rules_applied', [])
+                                st.text(f"应用规则: {', '.join(rules) if rules else '无'}")
 
-def display_score_comparison(comparison):
-    """显示评分对比"""
-    st.markdown('<div class="section-header">📊 质量评分对比</div>', unsafe_allow_html=True)
-    
-    # 总体改进
-    overall_improvement = comparison.get('overall_improvement', 0)
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        before_score = comparison.get('before_scores', {}).get('overall_score', 0)
-        st.metric("润色前总分", f"{before_score:.1f}")
-    
-    with col2:
-        after_score = comparison.get('after_scores', {}).get('overall_score', 0)
-        st.metric("润色后总分", f"{after_score:.1f}")
-    
-    with col3:
-        st.metric("总体改进", f"+{overall_improvement:.1f}", delta=f"+{overall_improvement:.1f}")
-    
-    with col4:
-        improvement_pct = comparison.get('overall_improvement_percentage', 0)
-        st.metric("改进百分比", f"{improvement_pct:.1f}%")
-    
-    # 各维度改进
-    st.markdown("### 各维度改进")
-    
-    dimensions = [
-        ('style_improvement', '风格匹配度', '风格匹配'),
-        ('academic_improvement', '学术规范性', '学术规范'),
-        ('readability_improvement', '可读性', '可读性')
-    ]
-    
-    improvements = []
-    labels = []
-    
-    for key, name, short_name in dimensions:
-        improvement = comparison.get(key, 0)
-        improvements.append(improvement)
-        labels.append(short_name)
-    
-    # 创建改进图表
-    fig = go.Figure(data=[
-        go.Bar(
-            x=labels,
-            y=improvements,
-            marker_color=['#1f77b4' if x >= 0 else '#d62728' for x in improvements],
-            text=[f"+{x:.1f}" if x >= 0 else f"{x:.1f}" for x in improvements],
-            textposition='auto'
-        )
-    ])
-    
-    fig.update_layout(
-        title="各维度改进情况",
-        xaxis_title="评分维度",
-        yaxis_title="改进分数",
-        height=400
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
 
 def quality_assessment_interface():
     """质量评估界面"""
