@@ -7,6 +7,4 @@
 
 from .multi_round_polisher import MultiRoundPolisher
 
-__all__ = [
-    'MultiRoundPolisher'
-]
+__all__ = ["MultiRoundPolisher"]

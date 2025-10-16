@@ -349,14 +349,17 @@ def status():
             else:
                 click.echo(f"❌ {dir_path}: 目录不存在")
         
-        # 检查风格指南
-        if Path(Config.STYLE_GUIDE_JSON).exists():
-            with open(Config.STYLE_GUIDE_JSON, 'r', encoding='utf-8') as f:
+        # 检查混合风格指南
+        hybrid_guide_path = Path('data/hybrid_style_guide.json')
+        if hybrid_guide_path.exists():
+            with open(hybrid_guide_path, 'r', encoding='utf-8') as f:
                 guide = json.load(f)
-            rules_count = len(guide.get('rules', []))
-            click.echo(f"✅ 风格指南: {rules_count} 条规则")
+            rules_count = guide.get('total_rules', 0)
+            official_count = guide.get('official_rules_count', 0)
+            empirical_count = guide.get('empirical_rules_count', 0)
+            click.echo(f"✅ 混合风格指南: {rules_count} 条规则 (官方: {official_count}, 经验: {empirical_count})")
         else:
-            click.echo("❌ 风格指南: 不存在")
+            click.echo("❌ 混合风格指南: 不存在")
         
         # 检查分析日志
         if Path(Config.ANALYSIS_LOG).exists():
@@ -616,6 +619,121 @@ def clear_cache():
         
     except Exception as e:
         click.echo(f"❌ 清除缓存失败: {str(e)}", err=True)
+        sys.exit(1)
+
+@cli.command()
+@click.option('--input-dir', default='data/batch_summaries', 
+              help='批次汇总文件目录')
+@click.option('--output', default='data/style_guide.json',
+              help='输出风格指南文件路径')
+def generate_guide(input_dir, output):
+    """从批次汇总文件生成最终的风格指南"""
+    click.echo("🔄 开始从批次汇总生成风格指南...")
+    
+    try:
+        # 导入必要的模块
+        from src.analysis.layered_analyzer import LayeredAnalyzer
+        import json
+        from pathlib import Path
+        
+        # 检查输入目录
+        input_path = Path(input_dir)
+        if not input_path.exists():
+            click.echo(f"❌ 输入目录不存在: {input_dir}", err=True)
+            sys.exit(1)
+        
+        # 收集所有批次汇总文件
+        batch_files = sorted(input_path.glob('batch_*.json'))
+        if not batch_files:
+            click.echo(f"❌ 在 {input_dir} 中未找到批次汇总文件", err=True)
+            sys.exit(1)
+        
+        click.echo(f"📊 找到 {len(batch_files)} 个批次汇总文件")
+        
+        # 加载批次汇总数据
+        batch_summaries = []
+        for batch_file in batch_files:
+            with open(batch_file, 'r', encoding='utf-8') as f:
+                batch_data = json.load(f)
+                batch_summaries.append(batch_data)
+                
+                # 显示批次信息
+                batch_id = batch_data.get('batch_id', batch_file.stem)
+                paper_count = batch_data.get('paper_count', 0)
+                rules_count = len(batch_data.get('comprehensive_rules', []))
+                click.echo(f"  📄 {batch_id}: {paper_count} 篇论文, {rules_count} 条规则")
+        
+        # 创建分析器并生成风格指南
+        click.echo("🤖 开始全局风格整合...")
+        analyzer = LayeredAnalyzer()
+        
+        style_guide = analyzer.integrate_global_style_union(batch_summaries)
+        
+        if 'error' in style_guide:
+            click.echo(f"❌ 生成风格指南失败: {style_guide['error']}", err=True)
+            sys.exit(1)
+        
+        # 显示结果摘要
+        total_papers = style_guide.get('total_papers_analyzed', 0)
+        total_batches = style_guide.get('total_batches', 0)
+        
+        click.echo(f"\n🎉 风格指南生成完成!")
+        click.echo(f"📊 处理摘要:")
+        click.echo(f"  批次数: {total_batches}")
+        click.echo(f"  论文数: {total_papers}")
+        
+        # 显示规则分类详情
+        rule_categories = style_guide.get('rule_categories', {})
+        if rule_categories:
+            click.echo(f"\n📋 规则分类详情:")
+            total_rules = 0
+            
+            for category_name, category_data in rule_categories.items():
+                if isinstance(category_data, dict) and 'rules' in category_data:
+                    rule_count = len(category_data['rules'])
+                    total_rules += rule_count
+                    
+                    # 获取类别信息
+                    threshold = category_data.get('threshold', 'N/A')
+                    description = category_data.get('description', 'N/A')
+                    
+                    click.echo(f"  📌 {category_name}:")
+                    click.echo(f"    阈值: {threshold}")
+                    click.echo(f"    描述: {description}")
+                    click.echo(f"    规则数: {rule_count} 条")
+            
+            click.echo(f"\n📊 总规则数: {total_rules} 条")
+        else:
+            click.echo(f"📋 总规则数: 0 条")
+        
+        click.echo(f"\n💾 风格指南已保存到: {output}")
+        
+        # 验证文件是否正确生成
+        output_path = Path(output)
+        if output_path.exists():
+            with open(output_path, 'r', encoding='utf-8') as f:
+                saved_guide = json.load(f)
+            
+            # 统计保存文件中的规则数量
+            saved_rule_categories = saved_guide.get('rule_categories', {})
+            saved_rules = 0
+            
+            click.echo(f"\n🔍 文件验证详情:")
+            for category_name, category_data in saved_rule_categories.items():
+                if isinstance(category_data, dict) and 'rules' in category_data:
+                    rule_count = len(category_data['rules'])
+                    saved_rules += rule_count
+                    
+                    threshold = category_data.get('threshold', 'N/A')
+                    click.echo(f"  ✅ {category_name}: {rule_count} 条规则 (阈值: {threshold})")
+            
+            click.echo(f"✅ 验证成功: 文件包含 {saved_rules} 条规则")
+        else:
+            click.echo("⚠️ 警告: 输出文件未找到")
+        
+    except Exception as e:
+        click.echo(f"❌ 生成过程中出现错误: {str(e)}", err=True)
+        logger.exception("生成风格指南失败")
         sys.exit(1)
 
 if __name__ == '__main__':

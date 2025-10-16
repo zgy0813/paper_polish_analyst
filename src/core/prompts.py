@@ -4,11 +4,10 @@ AI Prompt模板模块
 包含所有与OpenAI API交互的prompt模板。
 """
 
-from typing import Dict, List, Any
 
 class PromptTemplates:
     """Prompt模板类"""
-    
+
     @staticmethod
     def get_individual_analysis_prompt() -> str:
         """获取单篇论文分析的prompt"""
@@ -81,15 +80,16 @@ Paper Text:
 
     @staticmethod
     def get_batch_summary_prompt() -> str:
-        """获取批次汇总的prompt"""
+        """获取基于并集思维的批次汇总prompt"""
         return """
-Below are the individual analysis results of {paper_count} papers. Please extract common features and consistency patterns from these papers:
+Below are the individual analysis results of {paper_count} papers. Please collect ALL valuable writing patterns and style features from these papers using a "union" approach:
 
 Analysis Requirements:
-1. **Identify Common Features**: Find writing patterns that most papers follow
-2. **Calculate Consistency Metrics**: For each feature, calculate the proportion of papers that follow the pattern
-3. **Identify Variation Ranges**: Record the range of feature values (minimum, maximum, average)
-4. **Generate Batch-level Rules**: Generate preliminary style rules based on common features
+1. **Collect All Patterns**: Identify ALL writing patterns found, regardless of frequency
+2. **Categorize by Frequency**: Classify patterns into frequent (60%+), common (30%-60%), and alternative (10%-30%)
+3. **Document Variations**: Record different style approaches and variations
+4. **Generate Comprehensive Rules**: Create rules for all discovered patterns, not just common ones
+5. **Track Pattern Discovery**: Document which patterns are new vs. recurring
 
 Please output batch summary results in JSON format:
 
@@ -97,40 +97,93 @@ Please output batch summary results in JSON format:
 {{
   "batch_id": "batch_{batch_number}",
   "paper_count": 0,
-  "common_patterns": {{
-    "sentence_structure": {{
-      "avg_sentence_length_range": [min_value, max_value],
-      "avg_sentence_length_mean": average_value,
-      "compound_sentence_consistency": 0.0,
-      "complex_sentence_consistency": 0.0
+  "pattern_collection": {{
+    "frequent_patterns": {{
+      "sentence_structure": {{
+        "avg_sentence_length_range": [min_value, max_value],
+        "avg_sentence_length_mean": average_value,
+        "compound_sentence_consistency": 0.0,
+        "complex_sentence_consistency": 0.0
+      }},
+      "vocabulary": {{
+        "academic_word_consistency": 0.0,
+        "common_academic_words": ["word1", "word2", ...],
+        "verb_tense_consistency": 0.0
+      }},
+      "paragraph_organization": {{
+        "avg_paragraph_length_range": [min_value, max_value],
+        "topic_sentence_consistency": 0.0
+      }},
+      "academic_expression": {{
+        "passive_voice_range": [min_value, max_value],
+        "passive_voice_mean": average_value,
+        "first_person_consistency": 0.0
+      }}
     }},
-    "vocabulary": {{
-      "academic_word_consistency": 0.0,
-      "common_academic_words": ["word1", "word2", ...],
-      "verb_tense_consistency": 0.0
+    "common_patterns": {{
+      "sentence_structure": {{}},
+      "vocabulary": {{}},
+      "paragraph_organization": {{}},
+      "academic_expression": {{}}
     }},
-    "paragraph_organization": {{
-      "avg_paragraph_length_range": [min_value, max_value],
-      "topic_sentence_consistency": 0.0
-    }},
-    "academic_expression": {{
-      "passive_voice_range": [min_value, max_value],
-      "passive_voice_mean": average_value,
-      "first_person_consistency": 0.0
+    "alternative_patterns": {{
+      "sentence_structure": {{}},
+      "vocabulary": {{}},
+      "paragraph_organization": {{}},
+      "academic_expression": {{}}
     }}
   }},
-  "preliminary_rules": [
+  "comprehensive_rules": [
     {{
       "rule_id": "rule_id",
-      "rule_type": "preliminary",
+      "rule_type": "frequent|common|alternative",
+      "category": "Sentence Structure|Vocabulary|Paragraph Organization|Academic Expression",
       "description": "rule description",
+      "frequency": 0.0,
       "consistency_rate": 0.0,
-      "evidence": "supporting evidence"
+      "evidence": "supporting evidence",
+      "variations": ["variation1", "variation2"]
     }}
   ],
-  "variation_analysis": {{
-    "high_variation_features": ["feature1", "feature2"],
-    "low_variation_features": ["feature1", "feature2"]
+  "style_variations": {{
+    "conservative_style": {{
+      "characteristics": ["stable", "formal"],
+      "pattern_sources": ["frequent_patterns"]
+    }},
+    "balanced_style": {{
+      "characteristics": ["flexible", "adaptable"],
+      "pattern_sources": ["frequent_patterns", "common_patterns"]
+    }},
+    "innovative_style": {{
+      "characteristics": ["diverse", "creative"],
+      "pattern_sources": ["frequent_patterns", "common_patterns", "alternative_patterns"]
+    }}
+  }},
+  "pattern_discovery": {{
+    "new_patterns": ["pattern1", "pattern2"],
+    "recurring_patterns": ["pattern3", "pattern4"],
+    "unique_variations": ["variation1", "variation2"]
+  }},
+  "legacy_format": {{
+    "common_patterns": {{
+      "sentence_structure": {{}},
+      "vocabulary": {{}},
+      "paragraph_organization": {{}},
+      "academic_expression": {{}}
+    }},
+    "preliminary_rules": [
+      {{
+        "rule_id": "rule_id",
+        "rule_type": "preliminary",
+        "description": "rule description",
+        "consistency_rate": 0.0,
+        "evidence": "supporting evidence"
+      }}
+    ],
+    "variation_analysis": {{
+      "high_variation_features": ["feature1", "feature2"],
+      "low_variation_features": ["feature1", "feature2"]
+    }}
   }}
 }}
 ```
@@ -141,7 +194,7 @@ Paper Analysis Results:
 
     @staticmethod
     def get_global_integration_prompt() -> str:
-        """获取全局整合的prompt"""
+        """获取全局整合的prompt (保持向后兼容)"""
         return """
 Based on the summary analysis results from all batches, please generate the final style guide, distinguishing between core rules and optional rules:
 
@@ -187,6 +240,133 @@ Please output the final style guide in JSON format:
   "summary_statistics": {{
     "core_rules_count": 0,
     "optional_rules_count": 0,
+    "most_consistent_features": ["feature1", "feature2"],
+    "most_variable_features": ["feature1", "feature2"]
+  }}
+}}
+```
+
+Batch Summary Results:
+{batch_summaries}
+"""
+
+    @staticmethod
+    def get_global_integration_union_prompt() -> str:
+        """获取基于并集思维的全局整合prompt"""
+        return """
+Based on the summary analysis results from all batches, please generate a comprehensive style guide using a "union" approach that collects ALL valuable style patterns rather than filtering them out.
+
+Integration Requirements:
+1. **Collect All Patterns**: Include all style patterns found, regardless of frequency
+2. **Categorize by Frequency**: Classify rules into three categories based on usage rate
+3. **Track Rule Evolution**: Document how rules were discovered across different batches
+4. **Identify Style Variations**: Recognize different writing style approaches
+5. **Provide Choice Options**: Enable users to select from multiple style approaches
+
+Rule Categories:
+- **Frequent Rules (60%+ papers)**: High-frequency patterns, stable and reliable
+- **Common Rules (30%-60% papers)**: Moderate-frequency patterns, optional applications
+- **Alternative Rules (10%-30% papers)**: Lower-frequency patterns, innovative choices
+
+Please output the comprehensive style guide in JSON format:
+
+```json
+{{
+  "style_guide_version": "2.0",
+  "approach": "rule_supplementation",
+  "total_papers_analyzed": 0,
+  "analysis_date": "date",
+  "rule_categories": {{
+    "frequent_rules": {{
+      "threshold": "60%+",
+      "count": 0,
+      "description": "High-frequency patterns used by most papers",
+      "rules": [
+        {{
+          "rule_id": "freq_001",
+          "rule_type": "frequent",
+          "category": "Sentence Structure",
+          "description": "Use compound sentences with ratio > 0.5",
+          "frequency": 0.85,
+          "consistency_rate": 0.92,
+          "examples": [...],
+          "statistics": {{...}},
+          "evidence": "85% of papers use compound sentences frequently"
+        }}
+      ]
+    }},
+    "common_rules": {{
+      "threshold": "30%-60%",
+      "count": 0,
+      "description": "Moderate-frequency patterns for balanced writing",
+      "rules": [
+        {{
+          "rule_id": "common_001",
+          "rule_type": "common",
+          "category": "Vocabulary",
+          "description": "Use 'analyze' instead of 'examine' in certain contexts",
+          "frequency": 0.45,
+          "consistency_rate": 0.78,
+          "examples": [...],
+          "statistics": {{...}},
+          "evidence": "45% of papers prefer 'analyze' in methodological sections"
+        }}
+      ]
+    }},
+    "alternative_rules": {{
+      "threshold": "10%-30%",
+      "count": 0,
+      "description": "Lower-frequency patterns for innovative writing",
+      "rules": [
+        {{
+          "rule_id": "alt_001",
+          "rule_type": "alternative",
+          "category": "Expression",
+          "description": "Use first-person plural 'we' in collaborative research",
+          "frequency": 0.25,
+          "consistency_rate": 0.65,
+          "examples": [...],
+          "statistics": {{...}},
+          "evidence": "25% of papers use 'we' when describing collaborative work"
+        }}
+      ]
+    }}
+  }},
+  "rule_evolution": {{
+    "batch_01": {{
+      "description": "Established core baseline rules",
+      "rules_count": 0,
+      "new_rules_count": 0
+    }},
+    "batch_02": {{
+      "description": "Supplemented with 5 new rules",
+      "rules_count": 0,
+      "new_rules_count": 0
+    }}
+  }},
+  "style_variations": {{
+    "conservative": {{
+      "description": "Traditional academic style",
+      "rule_sources": ["frequent_rules"],
+      "characteristics": ["stable", "formal", "consistent"]
+    }},
+    "balanced": {{
+      "description": "Moderate innovation style",
+      "rule_sources": ["frequent_rules", "common_rules"],
+      "characteristics": ["flexible", "adaptable", "professional"]
+    }},
+    "innovative": {{
+      "description": "Creative academic style",
+      "rule_sources": ["frequent_rules", "common_rules", "alternative_rules"],
+      "characteristics": ["diverse", "creative", "expressive"]
+    }}
+  }},
+  "summary_statistics": {{
+    "total_rules_discovered": 0,
+    "frequent_rules_count": 0,
+    "common_rules_count": 0,
+    "alternative_rules_count": 0,
+    "rule_diversity_score": 0.0,
     "most_consistent_features": ["feature1", "feature2"],
     "most_variable_features": ["feature1", "feature2"]
   }}
@@ -337,7 +517,6 @@ User's Paper (after Round 2 modifications):
 {paper_text}
 """
 
-
     @staticmethod
     def get_quality_assessment_prompt() -> str:
         """获取质量评估的prompt"""
@@ -463,11 +642,11 @@ Official Style Guide Content:
     def format_prompt(cls, template: str, **kwargs) -> str:
         """
         格式化prompt模板
-        
+
         Args:
             template: prompt模板
             **kwargs: 格式化参数
-            
+
         Returns:
             格式化后的prompt
         """
@@ -476,19 +655,20 @@ Official Style Guide Content:
         except KeyError as e:
             raise ValueError(f"Missing required parameter for prompt: {e}")
 
+
 def main():
     """测试prompt模板"""
     prompts = PromptTemplates()
-    
+
     # 测试单篇分析prompt
     test_text = "This is a test paper content..."
     individual_prompt = prompts.format_prompt(
-        prompts.get_individual_analysis_prompt(),
-        paper_text=test_text
+        prompts.get_individual_analysis_prompt(), paper_text=test_text
     )
-    
+
     print("Individual Analysis Prompt:")
     print(individual_prompt[:200] + "...")
+
 
 if __name__ == "__main__":
     main()

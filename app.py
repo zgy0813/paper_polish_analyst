@@ -108,20 +108,30 @@ def setup_sidebar():
         return
     
     # 检查风格指南
-    if Path(Config.STYLE_GUIDE_JSON).exists():
-        st.sidebar.success("✅ 风格指南已加载")
-        with open(Config.STYLE_GUIDE_JSON, 'r', encoding='utf-8') as f:
+    hybrid_guide_path = Path("data/hybrid_style_guide.json")
+    style_guide_path = Path(Config.STYLE_GUIDE_JSON)
+    
+    if hybrid_guide_path.exists():
+        st.sidebar.success("✅ 混合风格指南已加载")
+        with open(hybrid_guide_path, 'r', encoding='utf-8') as f:
             guide = json.load(f)
-        st.sidebar.info(f"📊 规则数量: {len(guide.get('rules', []))}")
+        total_rules = guide.get('total_rules', 0)
+        official_rules = guide.get('official_rules_count', 0)
+        empirical_rules = guide.get('empirical_rules_count', 0)
+        st.sidebar.info(f"📊 总规则数: {total_rules}")
+        st.sidebar.info(f"🏛️ 官方规则: {official_rules}")
+        st.sidebar.info(f"📊 历史经验: {empirical_rules}")
+    elif style_guide_path.exists():
+        st.sidebar.success("✅ 标准风格指南已加载")
+        with open(style_guide_path, 'r', encoding='utf-8') as f:
+            guide = json.load(f)
+        rule_categories = guide.get('rule_categories', {})
+        total_rules = sum(category.get('count', 0) for category in rule_categories.values())
+        st.sidebar.info(f"📊 规则数量: {total_rules}")
     else:
         st.sidebar.warning("⚠️ 风格指南不存在")
         st.sidebar.info("请先运行: `python main.py analyze`")
     
-    # 系统信息
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 📋 系统信息")
-    st.sidebar.text(f"Python版本: {sys.version.split()[0]}")
-    st.sidebar.text(f"Streamlit版本: {st.__version__}")
 
 def paper_polishing_interface():
     """论文润色界面"""
@@ -446,76 +456,239 @@ def style_guide_interface():
     """风格指南界面"""
     st.markdown('<div class="section-header">📖 风格指南</div>', unsafe_allow_html=True)
     
-    # 检查风格指南是否存在
-    if not Path(Config.STYLE_GUIDE_JSON).exists():
+    # 优先检查混合风格指南
+    hybrid_guide_path = Path("data/hybrid_style_guide.json")
+    style_guide_path = Path(Config.STYLE_GUIDE_JSON)
+    
+    guide_file = None
+    guide_type = None
+    
+    if hybrid_guide_path.exists():
+        guide_file = hybrid_guide_path
+        guide_type = "hybrid"
+    elif style_guide_path.exists():
+        guide_file = style_guide_path
+        guide_type = "standard"
+    else:
         st.warning("⚠️ 风格指南不存在，请先运行分析命令")
         st.code("python main.py analyze")
         return
     
     try:
         # 加载风格指南
-        with open(Config.STYLE_GUIDE_JSON, 'r', encoding='utf-8') as f:
+        with open(guide_file, 'r', encoding='utf-8') as f:
             guide = json.load(f)
         
         # 指南摘要
         st.markdown("### 📊 指南摘要")
         
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("总规则数", len(guide.get('rules', [])))
-        
-        with col2:
-            core_rules = len([r for r in guide.get('rules', []) if r.get('rule_type') == 'core'])
-            st.metric("核心规则", core_rules)
-        
-        with col3:
-            optional_rules = len([r for r in guide.get('rules', []) if r.get('rule_type') == 'optional'])
-            st.metric("可选规则", optional_rules)
-        
-        with col4:
-            st.metric("分析论文数", guide.get('total_papers_analyzed', 0))
-        
-        # 规则类别分布
-        categories = guide.get('categories', {})
-        if categories:
-            st.markdown("### 📂 规则类别分布")
+        if guide_type == "hybrid":
+            # 混合风格指南的显示逻辑
+            col1, col2, col3, col4 = st.columns(4)
             
-            category_names = list(categories.keys())
-            category_counts = [len(rules) for rules in categories.values()]
+            with col1:
+                total_rules = guide.get('total_rules', 0)
+                st.metric("总规则数", total_rules)
             
-            fig = px.pie(
-                values=category_counts,
-                names=category_names,
-                title="规则类别分布"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            with col2:
+                official_rules = guide.get('official_rules_count', 0)
+                st.metric("官方规则", official_rules)
+            
+            with col3:
+                empirical_rules = guide.get('empirical_rules_count', 0)
+                st.metric("历史经验规则", empirical_rules)
+            
+            with col4:
+                st.metric("分析论文数", 80)  # 混合指南基于80篇论文
+            
+            # 显示指南类型
+            st.info(f"📋 当前使用：**混合风格指南** (官方规则 + 历史经验规则)")
+            
+        else:
+            # 标准风格指南的显示逻辑
+            col1, col2, col3, col4 = st.columns(4)
+            
+            # 从rule_categories中计算规则数量
+            rule_categories = guide.get('rule_categories', {})
+            total_rules = sum(category.get('count', 0) for category in rule_categories.values())
+            
+            with col1:
+                st.metric("总规则数", total_rules)
+            
+            with col2:
+                frequent_rules = rule_categories.get('frequent_rules', {}).get('count', 0)
+                st.metric("核心规则", frequent_rules)
+            
+            with col3:
+                common_rules = rule_categories.get('common_rules', {}).get('count', 0)
+                alternative_rules = rule_categories.get('alternative_rules', {}).get('count', 0)
+                optional_rules = common_rules + alternative_rules
+                st.metric("可选规则", optional_rules)
+            
+            with col4:
+                st.metric("分析论文数", guide.get('total_papers_analyzed', 0))
         
-        # 核心规则
-        core_rules = [r for r in guide.get('rules', []) if r.get('rule_type') == 'core']
-        if core_rules:
-            st.markdown("### 🎯 核心规则")
+        if guide_type == "hybrid":
+            # 混合风格指南的规则显示
+            categories = guide.get('categories', {})
+            if categories:
+                st.markdown("### 📂 规则类别分布")
+                
+                category_names = list(categories.keys())
+                category_counts = [len(rules) for rules in categories.values()]
+                
+                fig = px.pie(
+                    values=category_counts,
+                    names=category_names,
+                    title="规则类别分布"
+                )
+                st.plotly_chart(fig, use_container_width=True)
             
-            for i, rule in enumerate(core_rules[:10], 1):  # 显示前10条
-                with st.expander(f"{i}. {rule.get('description', '')}"):
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.write(f"**类型**: {rule.get('rule_type', '')}")
-                        st.write(f"**类别**: {rule.get('category', '')}")
-                        st.write(f"**遵循率**: {rule.get('frequency', 0):.1%}")
-                    
-                    with col2:
-                        st.write(f"**规则ID**: `{rule.get('rule_id', '')}`")
+            # 分离官方规则和历史经验规则
+            st.markdown("### 📋 规则详情")
+            
+            # 官方规则
+            official_rules = []
+            empirical_rules = []
+            
+            for category_name, rules in categories.items():
+                for rule in rules:
+                    if rule.get('rule_type') == 'official':
+                        official_rules.append(rule)
+                    elif rule.get('rule_type') in ['frequent', 'common', 'alternative']:
+                        empirical_rules.append(rule)
+            
+            # 创建两个标签页
+            tab_official, tab_empirical = st.tabs(["🏛️ 官方规则", "📊 历史经验规则"])
+            
+            with tab_official:
+                st.markdown(f"### 🏛️ 官方规则 ({len(official_rules)}条)")
+                st.info("📌 官方规则：来自期刊官方指南，必须严格遵守")
+                
+                for i, rule in enumerate(official_rules, 1):
+                    with st.expander(f"{i}. {rule.get('description', '')}"):
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.write(f"**优先级**: {rule.get('priority', '')}")
+                            st.write(f"**类别**: {rule.get('category', '')}")
+                            st.write(f"**执行级别**: {rule.get('enforcement_level', '')}")
+                            st.write(f"**置信度**: {rule.get('confidence', 0):.1%}")
+                        
+                        with col2:
+                            st.write(f"**规则ID**: `{rule.get('rule_id', '')}`")
+                            st.write(f"**来源**: {rule.get('source', '')}")
+                            if rule.get('section'):
+                                st.write(f"**章节**: {rule.get('section', '')}")
+                        
+                        # 显示要求
+                        requirements = rule.get('requirements', [])
+                        if requirements:
+                            st.write("**要求**:")
+                            for req in requirements:
+                                st.write(f"• {req}")
+                        
+                        # 显示禁止项
+                        prohibitions = rule.get('prohibitions', [])
+                        if prohibitions:
+                            st.write("**禁止**:")
+                            for proh in prohibitions:
+                                st.write(f"• ❌ {proh}")
                         
                         # 显示示例
                         examples = rule.get('examples', [])
                         if examples:
                             st.write("**示例**:")
-                            for example in examples[:2]:  # 显示前2个示例
-                                if 'before' in example and 'after' in example:
-                                    st.write(f"• 原文: {example['before']}")
-                                    st.write(f"• 修改: {example['after']}")
+                            for example in examples:
+                                if isinstance(example, dict):
+                                    if 'correct' in example:
+                                        st.write(f"✅ **正确**: {example['correct']}")
+                                    if 'incorrect' in example:
+                                        st.write(f"❌ **错误**: {example['incorrect']}")
+                                    if 'explanation' in example:
+                                        st.write(f"💡 **说明**: {example['explanation']}")
+                                else:
+                                    st.write(f"• {example}")
+            
+            with tab_empirical:
+                st.markdown(f"### 📊 历史经验规则 ({len(empirical_rules)}条)")
+                st.info("📌 历史经验规则：基于80篇AMJ论文的分析结果")
+                
+                for i, rule in enumerate(empirical_rules, 1):
+                    with st.expander(f"{i}. {rule.get('description', '')}"):
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.write(f"**类别**: {rule.get('category', '')}")
+                            st.write(f"**遵循率**: {rule.get('frequency', 0):.1%}")
+                            st.write(f"**一致性**: {rule.get('consistency_rate', 0):.1%}")
+                        
+                        with col2:
+                            st.write(f"**规则ID**: `{rule.get('rule_id', '')}`")
+                            st.write(f"**来源**: {rule.get('source', '')}")
+                        
+                        # 显示证据
+                        evidence = rule.get('evidence', '')
+                        if evidence:
+                            st.write(f"**证据**: {evidence}")
+                        
+                        # 显示统计信息
+                        statistics = rule.get('statistics', {})
+                        if statistics:
+                            st.write("**统计信息**:")
+                            for key, value in statistics.items():
+                                if isinstance(value, list):
+                                    st.write(f"• {key}: {', '.join(map(str, value))}")
+                                else:
+                                    st.write(f"• {key}: {value}")
+                        
+                        # 显示示例
+                        examples = rule.get('examples', [])
+                        if examples:
+                            st.write("**示例**:")
+                            for example in examples:
+                                st.write(f"• {example}")
+        
+        else:
+            # 标准风格指南的规则显示
+            rule_categories = guide.get('rule_categories', {})
+            if rule_categories:
+                st.markdown("### 📂 规则类别分布")
+                
+                category_names = list(rule_categories.keys())
+                category_counts = [category.get('count', 0) for category in rule_categories.values()]
+                
+                fig = px.pie(
+                    values=category_counts,
+                    names=category_names,
+                    title="规则类别分布"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # 显示各类别规则
+            for category_name, category_data in rule_categories.items():
+                rules = category_data.get('rules', [])
+                if rules:
+                    st.markdown(f"### 📋 {category_name.replace('_', ' ').title()}")
+                    
+                    for i, rule in enumerate(rules[:5], 1):  # 显示前5条
+                        with st.expander(f"{i}. {rule.get('description', '')}"):
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.write(f"**类型**: {rule.get('rule_type', '')}")
+                                st.write(f"**类别**: {rule.get('category', '')}")
+                                st.write(f"**遵循率**: {rule.get('frequency', 0):.1%}")
+                            
+                            with col2:
+                                st.write(f"**规则ID**: `{rule.get('rule_id', '')}`")
+                                
+                                # 显示示例
+                                examples = rule.get('examples', [])
+                                if examples:
+                                    st.write("**示例**:")
+                                    for example in examples[:2]:  # 显示前2个示例
+                                        st.write(f"• {example}")
         
         # 下载风格指南
         st.markdown("### 💾 下载风格指南")
@@ -524,25 +697,41 @@ def style_guide_interface():
         
         with col1:
             if st.button("下载JSON版本"):
-                with open(Config.STYLE_GUIDE_JSON, 'r', encoding='utf-8') as f:
+                with open(guide_file, 'r', encoding='utf-8') as f:
                     json_data = f.read()
+                file_name = "hybrid_style_guide.json" if guide_type == "hybrid" else "style_guide.json"
                 st.download_button(
                     label="下载JSON",
                     data=json_data,
-                    file_name="style_guide.json",
+                    file_name=file_name,
                     mime="application/json"
                 )
         
         with col2:
-            if st.button("下载Markdown版本") and Path(Config.STYLE_GUIDE_MD).exists():
-                with open(Config.STYLE_GUIDE_MD, 'r', encoding='utf-8') as f:
-                    md_data = f.read()
-                st.download_button(
-                    label="下载Markdown",
-                    data=md_data,
-                    file_name="style_guide.md",
-                    mime="text/markdown"
-                )
+            if guide_type == "hybrid":
+                md_path = Path("data/hybrid_style_guide.md")
+                if md_path.exists():
+                    if st.button("下载Markdown版本"):
+                        with open(md_path, 'r', encoding='utf-8') as f:
+                            md_data = f.read()
+                        st.download_button(
+                            label="下载Markdown",
+                            data=md_data,
+                            file_name="hybrid_style_guide.md",
+                            mime="text/markdown"
+                        )
+                else:
+                    st.warning("Markdown版本不存在")
+            else:
+                if st.button("下载Markdown版本") and Path(Config.STYLE_GUIDE_MD).exists():
+                    with open(Config.STYLE_GUIDE_MD, 'r', encoding='utf-8') as f:
+                        md_data = f.read()
+                    st.download_button(
+                        label="下载Markdown",
+                        data=md_data,
+                        file_name="style_guide.md",
+                        mime="text/markdown"
+                    )
         
     except Exception as e:
         st.error(f"❌ 加载风格指南失败: {str(e)}")
@@ -550,6 +739,55 @@ def style_guide_interface():
 def system_status_interface():
     """系统状态界面"""
     st.markdown('<div class="section-header">⚙️ 系统状态</div>', unsafe_allow_html=True)
+    
+    # 系统概览
+    st.markdown("### 📊 系统概览")
+    
+    # 检查当前使用的风格指南类型
+    hybrid_guide_path = Path("data/hybrid_style_guide.json")
+    style_guide_path = Path(Config.STYLE_GUIDE_JSON)
+    
+    if hybrid_guide_path.exists():
+        guide_type = "混合风格指南"
+        guide_info = "官方规则 + 历史经验规则"
+        guide_color = "success"
+    elif style_guide_path.exists():
+        guide_type = "标准风格指南"
+        guide_info = "基于论文分析的历史经验规则"
+        guide_color = "info"
+    else:
+        guide_type = "无风格指南"
+        guide_info = "需要先运行分析命令"
+        guide_color = "warning"
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.write(f"📋 **当前指南**: {guide_type}")
+    
+    with col2:
+        st.write(f"📝 **指南类型**: {guide_info}")
+    
+    with col3:
+        # 显示分析论文数量
+        if hybrid_guide_path.exists():
+            try:
+                with open(hybrid_guide_path, 'r', encoding='utf-8') as f:
+                    guide_data = json.load(f)
+                paper_count = 80  # 混合指南基于80篇论文
+                st.write(f"📚 **分析论文数**: {paper_count}")
+            except:
+                st.write(f"📚 **分析论文数**: 未知")
+        elif style_guide_path.exists():
+            try:
+                with open(style_guide_path, 'r', encoding='utf-8') as f:
+                    guide_data = json.load(f)
+                paper_count = guide_data.get('total_papers_analyzed', 0)
+                st.write(f"📚 **分析论文数**: {paper_count}")
+            except:
+                st.write(f"📚 **分析论文数**: 未知")
+        else:
+            st.write(f"📚 **分析论文数**: 0")
     
     # 配置状态
     st.markdown("### 🔧 配置状态")
@@ -563,12 +801,26 @@ def system_status_interface():
         with col1:
             st.write(f"**批次大小**: {Config.BATCH_SIZE}")
             st.write(f"**最大论文数**: {Config.MAX_PAPERS}")
-            st.write(f"**相似度阈值**: {Config.SIMILARITY_THRESHOLD}")
+            st.write(f"**AI提供商**: {Config.AI_PROVIDER.upper()}")
+            st.write(f"**AI模型**: {Config.get_ai_config()['model']}")
         
         with col2:
-            st.write(f"**核心规则阈值**: {Config.CORE_RULE_THRESHOLD}")
-            st.write(f"**可选规则阈值**: {Config.OPTIONAL_RULE_THRESHOLD}")
-            st.write(f"**OpenAI模型**: {Config.OPENAI_MODEL}")
+            st.write(f"**高频规则阈值**: {Config.FREQUENT_RULE_THRESHOLD:.1%}")
+            st.write(f"**常见规则阈值**: {Config.COMMON_RULE_THRESHOLD:.1%}")
+            st.write(f"**替代规则阈值**: {Config.ALTERNATIVE_RULE_THRESHOLD:.1%}")
+            st.write(f"**规则多样性阈值**: {Config.RULE_DIVERSITY_THRESHOLD:.1%}")
+        
+        # 停止条件配置
+        st.markdown("#### 🛑 停止条件配置")
+        col3, col4 = st.columns(2)
+        
+        with col3:
+            st.write(f"**最少批次数**: {Config.MIN_BATCHES_FOR_DIVERSITY}")
+            st.write(f"**最多批次数**: {Config.MAX_BATCHES_FOR_DIVERSITY}")
+        
+        with col4:
+            st.write(f"**AI最大令牌数**: {Config.AI_MAX_TOKENS}")
+            st.write(f"**AI温度参数**: {Config.AI_TEMPERATURE}")
         
     except Exception as e:
         st.error(f"❌ 配置错误: {str(e)}")
@@ -594,8 +846,8 @@ def system_status_interface():
     st.markdown("### 📄 重要文件状态")
     
     important_files = [
-        ("风格指南JSON", Config.STYLE_GUIDE_JSON),
-        ("风格指南MD", Config.STYLE_GUIDE_MD),
+        ("混合风格指南JSON", "data/hybrid_style_guide.json"),
+        ("混合风格指南MD", "data/hybrid_style_guide.md"),
         ("分析日志", Config.ANALYSIS_LOG)
     ]
     
@@ -606,18 +858,6 @@ def system_status_interface():
         else:
             st.warning(f"⚠️ {name}: 文件不存在")
     
-    # 系统信息
-    st.markdown("### 💻 系统信息")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.write(f"**Python版本**: {sys.version.split()[0]}")
-        st.write(f"**操作系统**: {os.name}")
-    
-    with col2:
-        st.write(f"**Streamlit版本**: {st.__version__}")
-        st.write(f"**工作目录**: {os.getcwd()}")
 
 if __name__ == "__main__":
     main()

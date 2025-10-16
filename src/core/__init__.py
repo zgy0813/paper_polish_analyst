@@ -10,8 +10,4 @@ from .pymupdf_extractor import PyMuPDFExtractor
 from .prompts import PromptTemplates
 from .official_guide_parser import OfficialGuideParser
 
-__all__ = [
-    'PyMuPDFExtractor',
-    'PromptTemplates',
-    'OfficialGuideParser'
-]
+__all__ = ["PyMuPDFExtractor", "PromptTemplates", "OfficialGuideParser"]

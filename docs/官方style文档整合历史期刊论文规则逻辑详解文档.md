@@ -2,7 +2,7 @@
 
 ## 📋 概述
 
-本文档详细阐述论文风格分析与润色系统中官方style文档如何与历史期刊论文分析规则进行整合，形成最终的混合风格指南。系统通过智能规则整合、冲突检测与解决、优先级排序等机制，将官方要求与实证分析结果有机结合，生成既符合期刊标准又体现实际写作模式的高质量风格指南。
+本文档详细阐述论文风格分析与润色系统中官方style文档如何与历史期刊论文分析规则进行整合，形成最终的混合风格指南。系统采用并集思维，通过智能规则整合、多样性收集、优先级排序等机制，将官方要求与实证分析结果有机结合，生成既符合期刊标准又体现丰富写作模式的高质量风格指南。
 
 ## 🏗️ 整体整合架构
 
@@ -11,9 +11,9 @@
 系统采用**双源规则整合**架构，将官方style文档规则与历史期刊论文实证分析规则进行智能整合：
 
 ```
-官方Style文档 → 官方规则提取 → 规则结构化 → 冲突检测与解决 → 混合风格指南
+官方Style文档 → 官方规则提取 → 规则结构化 → 多样性整合 → 混合风格指南
      ↓              ↓              ↓              ↓              ↓
-历史期刊论文 → 实证规则分析 → 规则分类分级 → 优先级排序 → 最终指南生成
+历史期刊论文 → 实证规则分析 → 规则分类分级 → 并集收集 → 最终指南生成
 ```
 
 **第一源：官方Style文档**
@@ -149,9 +149,9 @@ def _determine_priority(self, rule_text: str) -> str:
 - 结果融合：NLP客观数据 + AI主观判断
 
 **第二层：批次汇总分析**
-- 模式识别：识别批次内共同写作模式
-- 一致性计算：计算特征遵循率
-- 初步规则生成：基于共同特征生成规则
+- 模式识别：识别批次内多样性写作模式
+- 多样性计算：计算特征出现频率
+- 初步规则生成：基于多样性模式生成规则
 
 **第三层：全局风格整合**
 - 核心规则识别：80%以上论文遵循的规则
@@ -273,7 +273,7 @@ def _integrate_official_and_empirical(self, official_rules: List[Dict],
     return integrated_rules
 ```
 
-**冲突检测机制**
+**规则整合机制**
 ```python
 def _has_conflict_with_official(self, empirical_rule: Dict, 
                               official_rules: List[Dict]) -> bool:
@@ -480,12 +480,12 @@ def _determine_enforcement_level(self, rule: Dict) -> str:
 
 ## 🎯 整合逻辑的核心特点
 
-### 1. 智能冲突检测与解决
+### 1. 智能多样性整合与优先级排序
 
-**多层次冲突检测**
-- **语义冲突检测**：基于关键词对检测规则间的语义冲突
-- **执行冲突检测**：检测同一场景下的不同执行要求
-- **优先级冲突解决**：官方规则优先于经验规则
+**多层次规则整合**
+- **语义相似性检测**：基于关键词识别规则间的语义关联
+- **执行场景分析**：分析同一场景下的不同表达方式
+- **优先级排序机制**：官方规则优先于经验规则，高频规则优先于低频规则
 
 **冲突解决策略**
 ```python
@@ -538,6 +538,7 @@ def _match_rule_context(self, rule: Dict, writing_context: str) -> float:
     writing_words = set(writing_context_lower.split())
     
     overlap = len(rule_words.intersection(writing_words))
+    # 注意：这里使用intersection是为了计算重叠度，但整体策略仍为并集思维
     total_words = len(rule_words.union(writing_words))
     
     return overlap / total_words if total_words > 0 else 0
@@ -564,7 +565,7 @@ def _calculate_hybrid_quality_metrics(self, rules: List[Dict]) -> Dict:
         'avg_frequency': avg_frequency,                    # 平均遵循率
         'official_rule_ratio': len(official_rules) / len(rules),  # 官方规则比例
         'empirical_rule_ratio': len(empirical_rules) / len(rules), # 经验规则比例
-        'high_consistency_rules': len([r for r in rules if r.get('frequency', 0) >= 0.8]), # 高一致性规则数
+        'high_frequency_rules': len([r for r in rules if r.get('frequency', 0) >= 0.8]), # 高频规则数
         'coverage_score': min(1.0, len(rules) / 50),      # 覆盖度评分
         'reliability_score': avg_frequency                 # 可靠性评分
     }
@@ -572,7 +573,7 @@ def _calculate_hybrid_quality_metrics(self, rules: List[Dict]) -> Dict:
 
 ### 2. 规则验证与测试
 
-**规则一致性验证**
+**规则完整性验证**
 ```python
 def validate_hybrid_guide(self, hybrid_guide: Dict, test_papers: List[str]) -> Dict:
     """验证混合指南的有效性"""
@@ -659,7 +660,7 @@ def get_personalized_rules(self, user_preferences: Dict,
 **多维度质量保证**
 - **权威性保证**：官方规则确保期刊合规性
 - **实证性保证**：经验规则确保实际可操作性
-- **一致性保证**：冲突解决机制确保规则一致性
+- **多样性保证**：并集整合机制确保规则丰富性
 - **完整性保证**：覆盖学术写作的各个维度
 
 **质量监控指标**
@@ -667,7 +668,7 @@ def get_personalized_rules(self, user_preferences: Dict,
 quality_monitoring_metrics = {
     'authority_score': 0.95,      # 权威性评分（官方规则比例）
     'empirical_score': 0.88,      # 实证性评分（经验规则质量）
-    'consistency_score': 0.92,    # 一致性评分（冲突解决效果）
+    'diversity_score': 0.92,      # 多样性评分（规则丰富度）
     'coverage_score': 0.89,       # 完整性评分（规则覆盖度）
     'usability_score': 0.85       # 可用性评分（用户应用效果）
 }
@@ -681,7 +682,7 @@ quality_monitoring_metrics = {
 ```python
 class HybridGuideCache:
     def __init__(self):
-        self.official_rules_cache = "data/official_rules_cache.json"
+        self.official_rules_cache = "data/official_guides/official_rules_cache.json"
         self.empirical_rules_cache = "data/empirical_rules_cache.json"
         self.hybrid_guide_cache = "data/hybrid_guide_cache.json"
     
@@ -738,9 +739,9 @@ def parallel_rule_processing(self, official_rules: List[Dict],
     import concurrent.futures
     
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        # 并行处理冲突检测
-        conflict_future = executor.submit(
-            self._detect_all_conflicts, official_rules, empirical_rules
+        # 并行处理规则整合
+        integration_future = executor.submit(
+            self._integrate_all_rules, official_rules, empirical_rules
         )
         
         # 并行处理规则分类
@@ -849,13 +850,13 @@ def monitor_hybrid_guide_quality(self) -> Dict:
 
 1. **权威性与实证性结合**：官方规则确保合规性，经验规则提供实用性
 2. **完整性与灵活性平衡**：全面覆盖写作要求，同时提供灵活选择
-3. **智能化与个性化支持**：自动冲突检测，个性化规则推荐
+3. **智能化与个性化支持**：自动规则整合，个性化规则推荐
 4. **质量保证与持续优化**：多维度质量评估，增量更新机制
 
 ### 技术创新
 
 1. **双源规则整合算法**：创新的官方规则与经验规则整合机制
-2. **智能冲突检测系统**：基于语义的规则冲突自动检测与解决
+2. **智能规则整合系统**：基于语义的规则多样性自动收集与整合
 3. **多维度优先级排序**：综合考虑权威性、遵循率、置信度的排序算法
 4. **上下文感知规则应用**：根据写作上下文智能推荐相关规则
 

@@ -193,10 +193,31 @@ python main.py analyze-individual --progress
 **分析过程**：
 - 智能跳过已分析的论文，避免重复处理
 - 分批生成汇总报告，支持增量学习
-- 风格稳定时自动停止，节省API成本
+- 基于规则多样性自动停止，收集更多风格模式
 - 生成详细的单篇和批次分析报告
+- 采用并集思维：通过规则多样性收集和优先级排序，确保规则库的完整性和丰富性
 
-#### 第三步：整合官方指南
+#### 第三步：生成风格指南
+```bash
+# 从批次汇总文件生成最终风格指南
+python main.py generate-guide
+
+# 指定输入目录和输出文件
+python main.py generate-guide --input-dir data/batch_summaries --output data/style_guide.json
+
+# 查看生成命令帮助
+python main.py generate-guide --help
+```
+
+**生成功能**：
+- 自动扫描批次汇总文件目录
+- 智能加载所有批次的分析结果
+- 基于并集思维进行全局风格整合
+- 生成包含规则分类的完整风格指南
+- 显示详细的规则统计和分类信息
+- 验证生成文件的完整性
+
+#### 第四步：整合官方指南
 ```bash
 # 整合官方风格指南与经验数据
 python main.py integrate_guide --validate
@@ -219,7 +240,7 @@ python main.py integrate_guide --official-guide data/official_guides/AMJ_style_g
 - 生成混合风格指南（JSON + Markdown）
 - 支持规则优先级排序和执行级别分级
 
-#### 第四步：论文润色
+#### 第五步：论文润色
 ```bash
 # 交互式润色（推荐）
 python main.py polish --text "论文内容" --interactive
@@ -229,6 +250,12 @@ python main.py polish --file paper.txt --interactive
 
 # 批量润色
 python main.py polish --text "论文内容" --output polished.txt
+
+# 基于风格选择的润色（新功能）
+python main.py polish --text "论文内容" --style conservative
+python main.py polish --text "论文内容" --style balanced
+python main.py polish --text "论文内容" --style innovative
+python main.py polish --text "论文内容" --style auto  # 自动推荐风格
 ```
 
 **润色流程**：
@@ -237,7 +264,13 @@ python main.py polish --text "论文内容" --output polished.txt
 - **第三轮**: 段落衔接和逻辑流畅性
 - 支持逐条确认修改，用户完全控制润色过程
 
-#### 第五步：质量评估
+**风格选择**（新功能）：
+- **保守风格 (conservative)**: 遵循高频规则，稳定可靠，适合正式学术论文
+- **平衡风格 (balanced)**: 结合高频和常见规则，适度创新，适合一般学术写作
+- **创新风格 (innovative)**: 包含所有规则类型，多样化选择，适合创意写作
+- **自动推荐 (auto)**: 基于论文特征智能推荐最适合的风格
+
+#### 第六步：质量评估
 ```bash
 # 评估论文质量
 python main.py score --text "论文内容"
@@ -612,6 +645,22 @@ python main.py cache_status
 python main.py clear_cache
 ```
 
+### 风格指南生成
+```bash
+# 从批次汇总重新生成风格指南
+python main.py generate-guide
+
+# 使用自定义参数生成
+python main.py generate-guide --input-dir data/batch_summaries --output data/custom_style_guide.json
+```
+
+**功能特点**：
+- 自动检测所有批次汇总文件
+- 显示每个批次的论文数量和规则数量
+- 基于并集思维进行全局风格整合
+- 生成包含规则分类的完整指南
+- 提供详细的规则统计和验证信息
+
 ### 增量分析
 系统支持增量分析，避免重复处理：
 - 自动检测已分析的论文
@@ -717,9 +766,24 @@ python main.py analyze
 
 # 或使用单个文件分析
 python main.py analyze-individual
+
+# 从批次汇总生成风格指南
+python main.py generate-guide
 ```
 
-**5. 虚拟环境问题**
+**5. 批次汇总文件缺失**
+```bash
+# 检查批次汇总文件是否存在
+ls data/batch_summaries/
+
+# 如果不存在，先运行分析生成批次汇总
+python main.py analyze
+
+# 然后生成风格指南
+python main.py generate-guide
+```
+
+**6. 虚拟环境问题**
 ```bash
 # 虚拟环境未激活
 # 激活虚拟环境

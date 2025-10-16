@@ -30,7 +30,19 @@ class Config:
     # 分析配置
     BATCH_SIZE = int(os.getenv('BATCH_SIZE', '10'))  # 每批分析的论文数量
     MAX_PAPERS = int(os.getenv('MAX_PAPERS', '100'))  # 最大论文数量
-    SIMILARITY_THRESHOLD = float(os.getenv('SIMILARITY_THRESHOLD', '0.9'))  # 相似度阈值
+    
+    # 规则分类阈值 (基于并集思维)
+    FREQUENT_RULE_THRESHOLD = float(os.getenv('FREQUENT_RULE_THRESHOLD', '0.6'))  # 高频规则 (60%+)
+    COMMON_RULE_THRESHOLD = float(os.getenv('COMMON_RULE_THRESHOLD', '0.3'))      # 常见规则 (30%-60%)
+    ALTERNATIVE_RULE_THRESHOLD = float(os.getenv('ALTERNATIVE_RULE_THRESHOLD', '0.1'))  # 替代规则 (10%-30%)
+    
+    # 停止条件配置 (基于规则多样性)
+    MIN_BATCHES_FOR_DIVERSITY = int(os.getenv('MIN_BATCHES_FOR_DIVERSITY', '8'))    # 最少批次数 (从5改为8)
+    MAX_BATCHES_FOR_DIVERSITY = int(os.getenv('MAX_BATCHES_FOR_DIVERSITY', '15'))   # 最多批次数 (从10改为15)
+    RULE_DIVERSITY_THRESHOLD = float(os.getenv('RULE_DIVERSITY_THRESHOLD', '0.9'))  # 规则多样性阈值 (从0.7改为0.9)
+    
+    # 废弃的相似性阈值 (保留用于向后兼容)
+    SIMILARITY_THRESHOLD = float(os.getenv('SIMILARITY_THRESHOLD', '0.9'))  # 已废弃，不再使用
     
     # 文件路径配置
     DATA_DIR = os.getenv('DATA_DIR', 'data')

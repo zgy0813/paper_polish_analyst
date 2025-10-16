@@ -24,6 +24,7 @@ yarn.lock
 uploadPath
 logs
 .qoder
+.cursor
 
 */target
 .venv

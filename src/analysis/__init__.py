@@ -13,8 +13,8 @@ from .style_guide_generator import StyleGuideGenerator
 from .quality_scorer import QualityScorer
 
 __all__ = [
-    'LayeredAnalyzer',
-    'IncrementalAnalyzer', 
-    'StyleGuideGenerator',
-    'QualityScorer'
+    "LayeredAnalyzer",
+    "IncrementalAnalyzer",
+    "StyleGuideGenerator",
+    "QualityScorer",
 ]
