@@ -1,0 +1,30 @@
+[
+  {
+    "timestamp": "2025-10-16T18:08:03.957000",
+    "level": "ERROR",
+    "logger_name": "src.polishing.multi_round_polisher",
+    "message": "解析GPT响应失败: Expecting ',' delimiter: line 21 column 8 (char 1413)",
+    "line_number": 978
+  },
+  {
+    "timestamp": "2025-10-16T18:08:03.957000",
+    "level": "ERROR",
+    "logger_name": "src.polishing.multi_round_polisher",
+    "message": "响应文本: {",
+    "line_number": 979
+  },
+  {
+    "timestamp": "2025-10-16T18:08:03.957000",
+    "level": "ERROR",
+    "logger_name": "src.polishing.multi_round_polisher",
+    "message": "AI响应解析失败: Expecting ',' delimiter: line 21 column 8 (char 1413)",
+    "line_number": 988
+  },
+  {
+    "timestamp": "2025-10-16T17:09:33.825000",
+    "level": "ERROR",
+    "logger_name": "test",
+    "message": "测试错误日志",
+    "line_number": 3
+  }
+]

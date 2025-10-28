@@ -21,6 +21,7 @@ from config import Config
 from src.polishing.multi_round_polisher import MultiRoundPolisher
 from src.analysis.quality_scorer import QualityScorer
 from src.analysis.style_guide_generator import StyleGuideGenerator
+from src.log import get_log_summary, get_recent_errors, get_recent_warnings, search_logs_by_keyword, get_log_files_info
 
 # 页面配置
 st.set_page_config(
@@ -95,7 +96,7 @@ def main():
     setup_sidebar()
     
     # 主内容区域
-    tab1, tab2, tab3, tab4 = st.tabs(["📝 论文润色", "📊 质量评估", "📖 风格指南", "⚙️ 系统状态"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 论文润色", "📊 质量评估", "📖 风格指南", "⚙️ 系统状态", "📋 日志管理"])
     
     with tab1:
         paper_polishing_interface()
@@ -108,6 +109,9 @@ def main():
     
     with tab4:
         system_status_interface()
+    
+    with tab5:
+        log_management_interface()
 
 def setup_sidebar():
     """设置侧边栏"""
@@ -926,7 +930,166 @@ def system_status_interface():
             st.success(f"✅ {name}: {file_size:,} 字节")
         else:
             st.warning(f"⚠️ {name}: 文件不存在")
+
+
+def log_management_interface():
+    """日志管理界面"""
+    st.markdown('<div class="section-header">📋 日志管理</div>', unsafe_allow_html=True)
     
+    # 获取日志摘要
+    try:
+        log_summary = get_log_summary()
+        
+        # 显示日志统计信息
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("总日志条目", log_summary["total_entries"])
+        
+        with col2:
+            st.metric("错误数量", log_summary["error_count"], delta=None)
+        
+        with col3:
+            st.metric("警告数量", log_summary["warning_count"], delta=None)
+        
+        with col4:
+            st.metric("日志文件大小", f"{log_summary['file_size_kb']} KB")
+        
+        # 日志级别分布
+        if log_summary["level_distribution"]:
+            st.subheader("📊 日志级别分布")
+            level_data = log_summary["level_distribution"]
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # 柱状图
+                fig = px.bar(
+                    x=list(level_data.keys()),
+                    y=list(level_data.values()),
+                    title="日志级别分布",
+                    color=list(level_data.keys()),
+                    color_discrete_map={
+                        'ERROR': '#ff4444',
+                        'WARNING': '#ffaa00', 
+                        'INFO': '#4488ff',
+                        'DEBUG': '#44ff44'
+                    }
+                )
+                fig.update_layout(showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col2:
+                # 饼图
+                fig = px.pie(
+                    values=list(level_data.values()),
+                    names=list(level_data.keys()),
+                    title="日志级别占比",
+                    color_discrete_map={
+                        'ERROR': '#ff4444',
+                        'WARNING': '#ffaa00',
+                        'INFO': '#4488ff', 
+                        'DEBUG': '#44ff44'
+                    }
+                )
+                st.plotly_chart(fig, use_container_width=True)
+        
+        # 日志器分布
+        if log_summary["logger_distribution"]:
+            st.subheader("📝 日志器分布 (前10)")
+            logger_data = log_summary["logger_distribution"]
+            
+            fig = px.bar(
+                x=list(logger_data.values()),
+                y=list(logger_data.keys()),
+                orientation='h',
+                title="日志器分布",
+                color=list(logger_data.values()),
+                color_continuous_scale='Blues'
+            )
+            fig.update_layout(height=400)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # 日志查询功能
+        st.subheader("🔍 日志查询")
+        
+        query_col1, query_col2 = st.columns(2)
+        
+        with query_col1:
+            search_keyword = st.text_input("关键词搜索", placeholder="输入搜索关键词...")
+            search_limit = st.number_input("显示数量", min_value=1, max_value=100, value=20)
+        
+        with query_col2:
+            if st.button("🔍 搜索日志", type="primary"):
+                if search_keyword:
+                    with st.spinner("正在搜索日志..."):
+                        search_results = search_logs_by_keyword(search_keyword, search_limit)
+                    
+                    if search_results:
+                        st.success(f"找到 {len(search_results)} 条匹配的日志")
+                        
+                        for entry in search_results:
+                            with st.expander(f"[{entry['timestamp'][:19]}] {entry['level']} - {entry['logger_name']}"):
+                                st.text(f"消息: {entry['message']}")
+                                st.text(f"行号: {entry['line_number']}")
+                    else:
+                        st.warning("没有找到匹配的日志")
+                else:
+                    st.warning("请输入搜索关键词")
+        
+        # 错误和警告日志
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("🔴 最近错误")
+            if st.button("刷新错误日志"):
+                st.rerun()
+            
+            errors = get_recent_errors(10)
+            if errors:
+                for error in errors:
+                    with st.expander(f"[{error['timestamp'][:19]}] {error['logger_name']}"):
+                        st.error(error['message'])
+                        st.text(f"行号: {error['line_number']}")
+            else:
+                st.success("没有错误日志")
+        
+        with col2:
+            st.subheader("🟡 最近警告")
+            if st.button("刷新警告日志"):
+                st.rerun()
+            
+            warnings = get_recent_warnings(10)
+            if warnings:
+                for warning in warnings:
+                    with st.expander(f"[{warning['timestamp'][:19]}] {warning['logger_name']}"):
+                        st.warning(warning['message'])
+                        st.text(f"行号: {warning['line_number']}")
+            else:
+                st.success("没有警告日志")
+        
+        # 日志文件信息
+        st.subheader("📁 日志文件信息")
+        
+        log_files = get_log_files_info()
+        if log_files:
+            for file_info in log_files:
+                modified_time = datetime.fromtimestamp(file_info['modified_time']).strftime('%Y-%m-%d %H:%M:%S')
+                st.info(f"📄 {file_info['name']} - {file_info['size_kb']} KB - 修改时间: {modified_time}")
+        else:
+            st.warning("没有找到日志文件")
+        
+        # 时间范围信息
+        if log_summary["time_range"]["start"] and log_summary["time_range"]["end"]:
+            st.subheader("⏰ 日志时间范围")
+            start_time = log_summary["time_range"]["start"][:19]
+            end_time = log_summary["time_range"]["end"][:19]
+            st.info(f"从 {start_time} 到 {end_time}")
+    
+    except Exception as e:
+        st.error(f"获取日志信息失败: {str(e)}")
+        st.exception(e)
+
 
 if __name__ == "__main__":
     main()

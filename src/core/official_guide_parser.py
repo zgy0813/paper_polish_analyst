@@ -7,10 +7,10 @@
 import json
 from typing import Dict, List
 from pathlib import Path
-from openai import OpenAI
 
 from .pymupdf_extractor import PyMuPDFExtractor
 from .prompts import PromptTemplates
+from .ai_client import get_ai_client, AICallError
 from config import Config
 
 # 设置日志
@@ -32,14 +32,11 @@ class OfficialGuideParser:
 
         # 初始化AI客户端
         try:
-            ai_config = Config.get_ai_config()
-            self.client = OpenAI(
-                api_key=ai_config["api_key"], base_url=ai_config["base_url"]
-            )
-            self.ai_config = ai_config
+            self.ai_client = get_ai_client()
+            self.ai_config = Config.get_ai_config()
         except Exception as e:
             logger.error(f"初始化AI客户端失败: {str(e)}")
-            self.client = None
+            self.ai_client = None
             self.ai_config = None
 
     def parse_official_guide(self, pdf_path: str, force_refresh: bool = False) -> Dict:
@@ -161,23 +158,20 @@ class OfficialGuideParser:
             logger.info(f"官方指南解析Prompt长度: {len(prompt)} 字符")
 
             # 调用AI API
-            response = self.client.chat.completions.create(
-                model=self.ai_config["model"],
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=self.ai_config["max_tokens"],
-                temperature=self.ai_config["temperature"],
-            )
-
-            # 记录AI响应参数
-            response_content = response.choices[0].message.content
-            logger.info(
-                f"官方指南解析AI响应参数: model={response.model}, usage={response.usage}, finish_reason={response.choices[0].finish_reason}"
-            )
-            logger.info(f"官方指南解析AI响应内容长度: {len(response_content)} 字符")
-            logger.info(f"官方指南解析AI完整响应内容: {response_content}")
+            try:
+                response_content = self.ai_client.call_ai(
+                    prompt=prompt,
+                    system_message="你是一个专业的学术写作风格分析专家。",
+                    task_name="官方指南解析",
+                    max_tokens=self.ai_config["max_tokens"],
+                    temperature=self.ai_config["temperature"]
+                )
+            except AICallError as e:
+                logger.error(f"AI调用失败: {str(e)}")
+                return []
 
             # 解析AI响应
-            result = self._parse_ai_response(response.choices[0].message.content)
+            result = self._parse_ai_response(response_content)
 
             if "rules" in result:
                 return result["rules"]

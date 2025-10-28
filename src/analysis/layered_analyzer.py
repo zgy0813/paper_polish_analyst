@@ -8,11 +8,11 @@ import json
 import os
 from typing import Dict, List, Tuple
 from pathlib import Path
-from openai import OpenAI
 from datetime import datetime
 
 from ..utils.nlp_utils import NLPUtils
 from ..core.prompts import PromptTemplates
+from ..core.ai_client import get_ai_client, AICallError
 from config import Config
 
 # 设置日志
@@ -27,12 +27,9 @@ class LayeredAnalyzer:
     def __init__(self):
         """初始化分析器"""
         self.nlp_utils = NLPUtils()
-        ai_config = Config.get_ai_config()
-        self.client = OpenAI(
-            api_key=ai_config["api_key"], base_url=ai_config["base_url"]
-        )
+        self.ai_client = get_ai_client()
         self.prompts = PromptTemplates()
-        self.ai_config = ai_config
+        self.ai_config = Config.get_ai_config()
 
         # 分层温度配置
         self.temperature_config = {
@@ -793,23 +790,24 @@ class LayeredAnalyzer:
             # 获取任务特定的系统消息
             system_message = self._get_system_message(task_type)
 
-            response = self.client.chat.completions.create(
-                model=self.ai_config["model"],
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=temperature,
-                max_tokens=max_tokens,
-                top_p=0.9,
-                frequency_penalty=0.1,
-                presence_penalty=0.1,
-            )
+            try:
+                response_text = self.ai_client.call_ai(
+                    prompt=prompt,
+                    system_message=system_message,
+                    task_name=f"分层分析 - {task_type}",
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    additional_params={
+                        "top_p": 0.9,
+                        "frequency_penalty": 0.1,
+                        "presence_penalty": 0.1
+                    }
+                )
+                return response_text.strip()
 
-            logger.info(
-                f"AI调用成功 - 任务类型: {task_type}, 温度: {temperature}, 最大tokens: {max_tokens}"
-            )
-            return response.choices[0].message.content.strip()
+            except AICallError as e:
+                logger.error(f"AI API调用失败: {str(e)}")
+                raise
 
         except Exception as e:
             logger.error(f"AI API调用失败: {str(e)}")

@@ -9,11 +9,11 @@ import re
 from typing import Dict, List, Tuple
 from pathlib import Path
 from datetime import datetime
-from openai import OpenAI
 
 from ..analysis.style_guide_generator import StyleGuideGenerator
 from ..analysis.quality_scorer import QualityScorer
 from ..core.prompts import PromptTemplates
+from ..core.ai_client import get_ai_client, AICallError
 from .style_selector import StyleSelector
 from config import Config
 
@@ -28,14 +28,11 @@ class MultiRoundPolisher:
 
     def __init__(self):
         """初始化润色器"""
-        ai_config = Config.get_ai_config()
-        self.client = OpenAI(
-            api_key=ai_config["api_key"], base_url=ai_config["base_url"]
-        )
+        self.ai_client = get_ai_client()
         self.prompts = PromptTemplates()
         self.style_guide_generator = StyleGuideGenerator()
         self.quality_scorer = QualityScorer()
-        self.ai_config = ai_config
+        self.ai_config = Config.get_ai_config()
 
         # 加载风格指南和风格选择器
         self.style_guide = {}
@@ -571,38 +568,22 @@ class MultiRoundPolisher:
                 paper_text=self.current_text
             )
 
-            # 记录AI输入
-            logger.info("=== AI输入日志 - 综合润色 ===")
-            logger.info(f"模型: {self.ai_config['model']}")
-            logger.info(f"最大令牌数: {self.ai_config['max_tokens']}")
-            logger.info(f"温度参数: {self.ai_config['temperature']}")
-            logger.info(f"规则数量: {len(all_rules)}")
-            logger.info(f"输入文本长度: {len(self.current_text)} 字符")
-            logger.info("--- 完整Prompt ---")
-            logger.info(prompt)
-            logger.info("--- Prompt结束 ---")
-
             # 调用AI
-            response = self.client.chat.completions.create(
-                model="deepseek-chat",
-                messages=[
-                    {"role": "system", "content": "你是一个专业的学术写作编辑专家。"},
-                    {"role": "user", "content": prompt}
-                ],
-                # max_tokens=self.ai_config["max_tokens"],
-                temperature=self.ai_config["temperature"]
-            )
-
-            # 解析响应
-            response_text = response.choices[0].message.content
-            
-            # 记录AI输出
-            logger.info("=== AI输出日志 - 综合润色 ===")
-            logger.info(f"响应长度: {len(response_text)} 字符")
-            logger.info(f"使用令牌数: {response.usage.total_tokens if hasattr(response, 'usage') else '未知'}")
-            logger.info("--- 完整响应 ---")
-            logger.info(response_text)
-            logger.info("--- 响应结束 ---")
+            try:
+                response_text = self.ai_client.call_ai(
+                    prompt=prompt,
+                    system_message="你是一个专业的学术写作编辑专家。",
+                    task_name="综合润色",
+                    additional_params={"规则数量": len(all_rules)}
+                )
+            except AICallError as e:
+                logger.error(f"AI调用失败: {str(e)}")
+                return {
+                    "sentence_structure": {"modifications": [], "summary": {"total_modifications": 0}},
+                    "vocabulary_optimization": {"modifications": [], "summary": {"total_modifications": 0}},
+                    "paragraph_coherence": {"modifications": [], "summary": {"total_modifications": 0}},
+                    "error": f"AI调用失败: {str(e)}"
+                }
             
             result = self._parse_gpt_response(response_text)
             
@@ -665,39 +646,23 @@ class MultiRoundPolisher:
                 paper_text=self.current_text
             )
 
-            # 记录AI输入
-            logger.info("=== AI输入日志 - 综合润色（带风格） ===")
-            logger.info(f"模型: {self.ai_config['model']}")
-            logger.info(f"最大令牌数: {self.ai_config['max_tokens']}")
-            logger.info(f"温度参数: {self.ai_config['temperature']}")
-            logger.info(f"选择风格: {self.selected_style}")
-            logger.info(f"规则数量: {len(all_rules)}")
-            logger.info(f"输入文本长度: {len(self.current_text)} 字符")
-            logger.info("--- 完整Prompt ---")
-            logger.info(prompt)
-            logger.info("--- Prompt结束 ---")
-
             # 调用AI
-            response = self.client.chat.completions.create(
-                model="deepseek-chat",
-                messages=[
-                    {"role": "system", "content": f"你是一个专业的学术写作编辑专家，专门使用{self.selected_style}风格进行润色。"},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=8000,
-                temperature=self.ai_config["temperature"]
-            )
-
-            # 解析响应
-            response_text = response.choices[0].message.content
-            
-            # 记录AI输出
-            logger.info("=== AI输出日志 - 综合润色（带风格） ===")
-            logger.info(f"响应长度: {len(response_text)} 字符")
-            logger.info(f"使用令牌数: {response.usage.total_tokens if hasattr(response, 'usage') else '未知'}")
-            logger.info("--- 完整响应 ---")
-            logger.info(response_text)
-            logger.info("--- 响应结束 ---")
+            try:
+                response_text = self.ai_client.call_ai(
+                    prompt=prompt,
+                    system_message=f"你是一个专业的学术写作编辑专家，专门使用{self.selected_style}风格进行润色。",
+                    task_name=f"综合润色（{self.selected_style}风格）",
+                    max_tokens=8000,
+                    additional_params={"规则数量": len(all_rules), "选择风格": self.selected_style}
+                )
+            except AICallError as e:
+                logger.error(f"AI调用失败: {str(e)}")
+                return {
+                    "sentence_structure": {"modifications": [], "summary": {"total_modifications": 0}},
+                    "vocabulary": {"modifications": [], "summary": {"total_modifications": 0}},
+                    "transitions": {"modifications": [], "summary": {"total_modifications": 0}},
+                    "error": f"AI调用失败: {str(e)}"
+                }
             
             result = self._parse_gpt_response(response_text)
             
@@ -867,20 +832,21 @@ class MultiRoundPolisher:
             AI响应文本
         """
         try:
-            response = self.client.chat.completions.create(
-                model=self.ai_config["model"],
-                messages=[{"role": "user", "content": prompt}],
+            response_text = self.ai_client.call_ai(
+                prompt=prompt,
+                system_message="你是一个专业的学术写作专家。",
+                task_name=f"AI分析 - {task_type}",
                 temperature=0.3,
                 max_tokens=4000,
-                top_p=0.9,
-                frequency_penalty=0.1,
-                presence_penalty=0.1,
+                additional_params={
+                    "top_p": 0.9,
+                    "frequency_penalty": 0.1,
+                    "presence_penalty": 0.1
+                }
             )
+            return response_text.strip()
 
-            logger.info(f"AI调用成功 - 任务类型: {task_type}")
-            return response.choices[0].message.content.strip()
-
-        except Exception as e:
+        except AICallError as e:
             logger.error(f"AI API调用失败: {str(e)}")
             raise
 
@@ -929,28 +895,21 @@ class MultiRoundPolisher:
             logger.info(f"润色轮次{round_info['round']}AI请求参数: {request_params}")
             logger.info(f"润色轮次{round_info['round']}Prompt长度: {len(prompt)} 字符")
 
-            # 调用GPT-4
-            response = self.client.chat.completions.create(
-                model=self.ai_config["model"],
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=self.ai_config["max_tokens"],
-                temperature=self.ai_config["temperature"],
-            )
-
-            # 记录AI响应参数
-            response_content = response.choices[0].message.content
-            logger.info(
-                f"润色轮次{round_info['round']}AI响应参数: model={response.model}, usage={response.usage}, finish_reason={response.choices[0].finish_reason}"
-            )
-            logger.info(
-                f"润色轮次{round_info['round']}AI响应内容长度: {len(response_content)} 字符"
-            )
-            logger.info(
-                f"润色轮次{round_info['round']}AI完整响应内容: {response_content}"
-            )
+            # 调用AI
+            try:
+                response_content = self.ai_client.call_ai(
+                    prompt=prompt,
+                    system_message="你是一个专业的学术写作专家。",
+                    task_name=f"润色轮次{round_info['round']} - {round_info['round_name']}",
+                    max_tokens=self.ai_config["max_tokens"],
+                    temperature=self.ai_config["temperature"]
+                )
+            except AICallError as e:
+                logger.error(f"润色轮次{round_info['round']}AI调用失败: {str(e)}")
+                return []
 
             # 解析响应
-            result = self._parse_gpt_response(response.choices[0].message.content)
+            result = self._parse_gpt_response(response_content)
 
             if "modifications" in result:
                 return result["modifications"]
@@ -1211,39 +1170,20 @@ class MultiRoundPolisher:
                 paper_text=self.current_text
             )
 
-            # 记录AI输入
-            logger.info("=== AI输入日志 - 简洁润色（完整风格指南） ===")
-            logger.info(f"模型: {self.ai_config['model']}")
-            logger.info(f"最大令牌数: {self.ai_config['max_tokens']}")
-            logger.info(f"温度参数: {self.ai_config['temperature']}")
-            logger.info(f"选择风格: {self.selected_style}")
-            logger.info(f"使用完整混合风格指南: {style_guide.get('total_rules', 0)} 条规则")
-            logger.info(f"输入文本长度: {len(self.current_text)} 字符")
-            logger.info("--- 完整Prompt ---")
-            logger.info(prompt)
-            logger.info("--- Prompt结束 ---")
-
             # 调用AI
-            response = self.client.chat.completions.create(
-                model="deepseek-chat",
-                messages=[
-                    {"role": "system", "content": f"你是一个专业的学术写作编辑专家，专门使用{self.selected_style}风格进行润色。"},
-                    {"role": "user", "content": prompt}
-                ],
-                # max_tokens=self.ai_config["max_tokens"],
-                temperature=self.ai_config["temperature"]
-            )
-
-            # 获取润色后的文本
-            polished_text = response.choices[0].message.content.strip()
-            
-            # 记录AI输出
-            logger.info("=== AI输出日志 - 简洁润色（完整风格指南） ===")
-            logger.info(f"响应长度: {len(polished_text)} 字符")
-            logger.info(f"使用令牌数: {response.usage.total_tokens if hasattr(response, 'usage') else '未知'}")
-            logger.info("--- 润色后文本 ---")
-            logger.info(polished_text[:200] + "..." if len(polished_text) > 200 else polished_text)
-            logger.info("--- 文本结束 ---")
+            try:
+                polished_text = self.ai_client.call_ai(
+                    prompt=prompt,
+                    system_message=f"你是一个专业的学术写作编辑专家，专门使用{self.selected_style}风格进行润色。",
+                    task_name=f"简洁润色（{self.selected_style}风格）",
+                    additional_params={
+                        "选择风格": self.selected_style,
+                        "使用完整混合风格指南": style_guide.get('total_rules', 0)
+                    }
+                ).strip()
+            except AICallError as e:
+                logger.error(f"AI调用失败: {str(e)}")
+                return self.current_text
             
             return polished_text
 
