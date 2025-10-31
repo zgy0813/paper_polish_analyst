@@ -13,6 +13,11 @@ from config import Config
 
 # 设置日志
 from ..utils.logger_config import get_logger
+from ..utils.style_dimensions import (
+    DIMENSION_LABELS,
+    map_rule_to_dimension,
+    normalize_dimension_label,
+)
 
 logger = get_logger(__name__)
 
@@ -43,6 +48,30 @@ class StyleSelector:
         except Exception as e:
             logger.error(f"加载风格指南失败: {str(e)}")
             return {}
+
+    def _normalize_rules(self, rules: List[Dict]) -> List[Dict]:
+        """复制并统一规则的类别标签"""
+        normalized_rules: List[Dict] = []
+
+        for rule in rules or []:
+            if not isinstance(rule, dict):
+                continue
+
+            normalized_rule = rule.copy()
+            category = normalize_dimension_label(normalized_rule.get("category", ""))
+
+            if (
+                category not in DIMENSION_LABELS
+                and normalized_rule.get("description")
+            ):
+                category = normalize_dimension_label(
+                    map_rule_to_dimension(normalized_rule.get("description", ""))
+                )
+
+            normalized_rule["category"] = category
+            normalized_rules.append(normalized_rule)
+
+        return normalized_rules
 
     def _build_rule_sets(self) -> Dict:
         """
@@ -76,29 +105,28 @@ class StyleSelector:
         if "rule_categories" in self.style_guide:
             categories = self.style_guide["rule_categories"]
 
-            # 保守风格：只使用高频规则
-            if "frequent_rules" in categories:
-                rule_sets["conservative"]["rules"] = categories["frequent_rules"].get(
-                    "rules", []
-                )
+            frequent_rules = self._normalize_rules(
+                categories.get("frequent_rules", {}).get("rules", [])
+            )
+            common_rules = self._normalize_rules(
+                categories.get("common_rules", {}).get("rules", [])
+            )
+            alternative_rules = self._normalize_rules(
+                categories.get("alternative_rules", {}).get("rules", [])
+            )
 
-            # 平衡风格：使用高频+常见规则
-            balanced_rules = []
-            if "frequent_rules" in categories:
-                balanced_rules.extend(categories["frequent_rules"].get("rules", []))
-            if "common_rules" in categories:
-                balanced_rules.extend(categories["common_rules"].get("rules", []))
+            # 保守风格：只使用高频规则
+            rule_sets["conservative"]["rules"] = frequent_rules
+
+            # 平衡风格：高频 + 常见
+            balanced_rules = [rule.copy() for rule in frequent_rules]
+            balanced_rules.extend(common_rules)
             rule_sets["balanced"]["rules"] = balanced_rules
 
-            # 创新风格：使用所有规则
-            innovative_rules = []
-            for category_name in [
-                "frequent_rules",
-                "common_rules",
-                "alternative_rules",
-            ]:
-                if category_name in categories:
-                    innovative_rules.extend(categories[category_name].get("rules", []))
+            # 创新风格：包含所有规则
+            innovative_rules = [rule.copy() for rule in frequent_rules]
+            innovative_rules.extend([rule.copy() for rule in common_rules])
+            innovative_rules.extend([rule.copy() for rule in alternative_rules])
             rule_sets["innovative"]["rules"] = innovative_rules
 
         return rule_sets
@@ -148,13 +176,18 @@ class StyleSelector:
 
         Args:
             style: 风格名称
-            category: 规则类别 (Sentence Structure, Vocabulary, etc.)
+            category: 规则类别 (Narrative Strategies, Rhythm & Flow, etc.)
 
         Returns:
             指定类别的规则列表
         """
         rules = self.get_rules_for_style(style)
-        return [rule for rule in rules if rule.get("category", "") == category]
+        target_category = normalize_dimension_label(category)
+        return [
+            rule
+            for rule in rules
+            if normalize_dimension_label(rule.get("category", "")) == target_category
+        ]
 
     def recommend_style(self, paper_features: Dict) -> str:
         """
@@ -311,14 +344,18 @@ class StyleSelector:
 
         # 焦点映射
         focus_mapping = {
-            "sentence_structure": "Sentence Structure",
-            "vocabulary": "Vocabulary",
-            "paragraph_organization": "Paragraph Organization",
-            "academic_expression": "Academic Expression",
+            "sentence_structure": "Rhythm & Flow",
+            "vocabulary": "Terminology Management",
+            "paragraph_organization": "Section Patterns",
+            "academic_expression": "Voice & Tone",
         }
 
-        target_category = focus_mapping.get(focus, focus)
-        return [rule for rule in rules if rule.get("category", "") == target_category]
+        target_category = normalize_dimension_label(focus_mapping.get(focus, focus))
+        return [
+            rule
+            for rule in rules
+            if normalize_dimension_label(rule.get("category", "")) == target_category
+        ]
 
     def get_rule_statistics(self) -> Dict:
         """
@@ -346,7 +383,7 @@ class StyleSelector:
             all_rules.extend(info["rules"])
 
         for rule in all_rules:
-            category = rule.get("category", "Unknown")
+            category = normalize_dimension_label(rule.get("category", "Unknown"))
             if category not in stats["by_category"]:
                 stats["by_category"][category] = 0
             stats["by_category"][category] += 1

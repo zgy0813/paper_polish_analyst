@@ -14,6 +14,10 @@ from ..utils.nlp_utils import NLPUtils
 from ..core.prompts import PromptTemplates
 from ..core.ai_client import get_ai_client, AICallError
 from config import Config
+from ..utils.style_dimensions import (
+    map_rule_to_dimension,
+    normalize_dimension_label,
+)
 
 # 设置日志
 from ..utils.logger_config import get_logger
@@ -652,38 +656,16 @@ class LayeredAnalyzer:
 
     def _categorize_rule_type(self, description: str) -> str:
         """
-        根据规则描述分类规则类型
+        根据规则描述映射到统一的写作维度
 
         Args:
             description: 规则描述
 
         Returns:
-            规则类型
+            规则维度名称
         """
-        description_lower = description.lower()
-
-        if any(
-            keyword in description_lower
-            for keyword in ["sentence", "compound", "complex", "length"]
-        ):
-            return "Sentence Structure"
-        elif any(
-            keyword in description_lower
-            for keyword in ["vocabulary", "word", "term", "phrase"]
-        ):
-            return "Vocabulary"
-        elif any(
-            keyword in description_lower
-            for keyword in ["paragraph", "topic", "organization"]
-        ):
-            return "Paragraph Organization"
-        elif any(
-            keyword in description_lower
-            for keyword in ["passive", "active", "first person", "tense"]
-        ):
-            return "Academic Expression"
-        else:
-            return "General"
+        dimension = map_rule_to_dimension(description or "")
+        return normalize_dimension_label(dimension)
 
     def _parse_gpt_response(self, response_text: str) -> Dict:
         """

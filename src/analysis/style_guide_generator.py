@@ -13,6 +13,11 @@ from config import Config
 
 # 设置日志
 from ..utils.logger_config import get_logger
+from ..utils.style_dimensions import (
+    DIMENSION_LABELS,
+    map_rule_to_dimension,
+    normalize_dimension_label,
+)
 
 logger = get_logger(__name__)
 
@@ -165,54 +170,16 @@ class StyleGuideGenerator:
 
     def _categorize_rule(self, description: str) -> str:
         """
-        对规则进行分类
+        将规则描述映射到8大写作维度
 
         Args:
             description: 规则描述
 
         Returns:
-            规则类别
+            规则类别（统一后的维度标签）
         """
-        description_lower = description.lower()
-
-        if any(
-            word in description_lower
-            for word in ["sentence", "length", "structure", "compound"]
-        ):
-            return "句式结构"
-        elif any(
-            word in description_lower
-            for word in ["word", "vocabulary", "term", "academic"]
-        ):
-            return "词汇选择"
-        elif any(
-            word in description_lower for word in ["paragraph", "topic", "organization"]
-        ):
-            return "段落组织"
-        elif any(
-            word in description_lower
-            for word in [
-                "transition",
-                "coherence",
-                "connect",
-                "flow",
-                "衔接",
-                "连接",
-                "过渡",
-            ]
-        ):
-            return "段落衔接"
-        elif any(
-            word in description_lower
-            for word in ["passive", "voice", "person", "first"]
-        ):
-            return "学术表达"
-        elif any(
-            word in description_lower for word in ["citation", "reference", "argument"]
-        ):
-            return "引用论证"
-        else:
-            return "其他"
+        dimension = map_rule_to_dimension(description or "")
+        return normalize_dimension_label(dimension)
 
     def _collect_examples(self, rules: List[Dict]) -> List[Dict]:
         """
@@ -294,10 +261,24 @@ class StyleGuideGenerator:
         # 按类别分组
         categories = {}
         for rule in rules:
-            category = rule.get("category", "其他")
-            if category not in categories:
-                categories[category] = []
-            categories[category].append(rule)
+            original_category = rule.get("category", "")
+
+            if original_category:
+                normalized_category = normalize_dimension_label(original_category)
+                if normalized_category not in DIMENSION_LABELS:
+                    normalized_category = normalize_dimension_label(
+                        map_rule_to_dimension(rule.get("description", ""))
+                    )
+            else:
+                normalized_category = normalize_dimension_label(
+                    map_rule_to_dimension(rule.get("description", ""))
+                )
+
+            rule["category"] = normalized_category
+
+            if normalized_category not in categories:
+                categories[normalized_category] = []
+            categories[normalized_category].append(rule)
 
         structured_guide = {
             "style_guide_version": "1.0",
@@ -776,7 +757,21 @@ class StyleGuideGenerator:
         categories = {}
 
         for rule in rules:
-            category = rule.get("category", "其他")
+            current_category = rule.get("category", "")
+            if current_category:
+                category = normalize_dimension_label(current_category)
+                if category not in DIMENSION_LABELS:
+                    category = normalize_dimension_label(
+                        map_rule_to_dimension(rule.get("description", ""))
+                    )
+            else:
+                category = normalize_dimension_label(
+                    map_rule_to_dimension(rule.get("description", ""))
+                )
+                rule["category"] = category
+
+            rule["category"] = category
+
             if category not in categories:
                 categories[category] = []
             categories[category].append(rule)

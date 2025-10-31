@@ -95,6 +95,150 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+def _count_string_leaves(data):
+    if isinstance(data, dict):
+        return sum(_count_string_leaves(value) for value in data.values())
+    if isinstance(data, list):
+        return sum(_count_string_leaves(item) for item in data)
+    if isinstance(data, str):
+        return 1
+    return 0
+
+def _count_official_rules(guide):
+    categories = guide.get('categories')
+    if isinstance(categories, dict):
+        return sum(len(rules) for rules in categories.values() if isinstance(rules, list))
+    if 'official_style_requirements' in guide:
+        return _count_string_leaves(guide['official_style_requirements'])
+    part_1 = guide.get('part_1_official_rules', {})
+    content = part_1.get('content')
+    if isinstance(content, list):
+        return len(content)
+    if isinstance(content, dict):
+        return _count_string_leaves(content)
+    return guide.get('official_rules_count', 0) or 0
+
+def _count_empirical_rules(guide):
+    categories = guide.get('categories')
+    if isinstance(categories, dict):
+        return sum(len(rules) for rules in categories.values() if isinstance(rules, list))
+    if 'historical_style_patterns' in guide:
+        total = 0
+        for pattern_groups in guide['historical_style_patterns'].values():
+            if isinstance(pattern_groups, dict):
+                for items in pattern_groups.values():
+                    if isinstance(items, list):
+                        total += len(items)
+        return total
+    part_2 = guide.get('part_2_writing_style_features', {})
+    features = part_2.get('features', {})
+    if isinstance(features, dict):
+        total = 0
+        for value in features.values():
+            if isinstance(value, dict):
+                for nested in value.values():
+                    if isinstance(nested, list):
+                        total += len(nested)
+            elif isinstance(value, list):
+                total += len(value)
+        return total
+    return guide.get('empirical_rules_count', 0) or 0
+
+def compute_hybrid_rule_counts(guide):
+    official_rules = guide.get('official_rules_count')
+    empirical_rules = guide.get('empirical_rules_count')
+    total_rules = guide.get('total_rules')
+    
+    has_official_data = bool(guide.get('official_style_requirements')) or bool(guide.get('part_1_official_rules', {}).get('content')) or bool(guide.get('categories'))
+    has_empirical_data = bool(guide.get('historical_style_patterns')) or bool(guide.get('part_2_writing_style_features', {}).get('features')) or bool(guide.get('categories'))
+    
+    if (official_rules is None or official_rules == 0) and has_official_data:
+        official_rules = _count_official_rules(guide)
+    if (empirical_rules is None or empirical_rules == 0) and has_empirical_data:
+        empirical_rules = _count_empirical_rules(guide)
+    if (total_rules is None or total_rules == 0):
+        total_rules = (official_rules or 0) + (empirical_rules or 0)
+    
+    return total_rules or 0, official_rules or 0, empirical_rules or 0
+
+def _detect_hybrid_schema(guide):
+    if isinstance(guide.get('categories'), dict):
+        return 'structured'
+    if guide.get('official_style_requirements') or guide.get('part_1_official_rules'):
+        return 'official_historical'
+    return 'unknown'
+
+def _get_official_sections(guide):
+    if isinstance(guide.get('official_style_requirements'), dict):
+        return guide['official_style_requirements']
+    part_1 = guide.get('part_1_official_rules', {})
+    content = part_1.get('content')
+    if isinstance(content, dict):
+        return content
+    return {}
+
+def _get_historical_patterns(guide):
+    if isinstance(guide.get('historical_style_patterns'), dict):
+        return guide['historical_style_patterns']
+    part_2 = guide.get('part_2_writing_style_features', {})
+    features = part_2.get('features')
+    if isinstance(features, dict):
+        return features
+    return {}
+
+def _format_label(label):
+    if not isinstance(label, str):
+        return str(label)
+    text = label.replace('_', ' ').strip()
+    if not text:
+        return ""
+    return text if text.isupper() else text.title()
+
+def _render_official_section_content(content):
+    if isinstance(content, str):
+        st.write(content)
+        return
+    if isinstance(content, dict):
+        for key, value in content.items():
+            if isinstance(value, str):
+                st.markdown(f"- **{key}**: {value}")
+            else:
+                st.markdown(f"**{key}**")
+                _render_official_section_content(value)
+        return
+    if isinstance(content, list):
+        for item in content:
+            _render_official_section_content(item)
+        return
+    st.write(str(content))
+
+def _render_pattern_entry(pattern):
+    if not isinstance(pattern, dict):
+        st.markdown(f"- {pattern}")
+        return
+    name = pattern.get('pattern') or pattern.get('name') or "Unnamed Pattern"
+    freq = pattern.get('global_frequency')
+    if freq is None:
+        freq = pattern.get('frequency')
+    if isinstance(freq, (int, float)):
+        freq_text = f"{freq:.1%}"
+    elif isinstance(freq, str) and freq.strip():
+        freq_text = freq.strip()
+    else:
+        freq_text = ""
+    description = pattern.get('description') or pattern.get('summary') or ""
+    freq_suffix = f"（{freq_text}）" if freq_text else ""
+    desc_suffix = f" — {description}" if description else ""
+    st.markdown(f"- **{name}**{freq_suffix}{desc_suffix}")
+    
+    examples = pattern.get('examples')
+    if isinstance(examples, dict):
+        for ex_name, ex_text in examples.items():
+            st.markdown(f"    - {_format_label(ex_name)}: {ex_text}")
+    elif isinstance(examples, list):
+        for example in examples:
+            st.markdown(f"    - {example}")
+
 def main():
     """主函数"""
     # 标题
@@ -141,9 +285,7 @@ def setup_sidebar():
         st.sidebar.success("✅ 混合风格指南已加载")
         with open(hybrid_guide_path, 'r', encoding='utf-8') as f:
             guide = json.load(f)
-        total_rules = guide.get('total_rules', 0)
-        official_rules = guide.get('official_rules_count', 0)
-        empirical_rules = guide.get('empirical_rules_count', 0)
+        total_rules, official_rules, empirical_rules = compute_hybrid_rule_counts(guide)
         st.sidebar.info(f"📊 总规则数: {total_rules}")
         st.sidebar.info(f"🏛️ 官方规则: {official_rules}")
         st.sidebar.info(f"📊 历史经验: {empirical_rules}")
@@ -186,37 +328,17 @@ def paper_polishing_interface():
             st.success(f"✅ 文件已上传: {uploaded_file.name}")
     
     if paper_text:
-        # 润色选项 - 使用不均匀列宽让控件更靠近
-        col1, col2 = st.columns([1.2, 0.8])
-        
-        with col1:
-            style_options = {
-                "平衡": "balanced",
-                "保守": "conservative", 
-                "创新": "innovative",
-                "自动": "auto"
-            }
-            
-            style_display = st.selectbox(
-                "润色风格",
-                list(style_options.keys()),
-                index=0,
-                help="选择润色风格：平衡、保守、创新或自动推荐"
-            )
-            style_choice = style_options[style_display]
-        
-        with col2:
-            output_mode = st.radio(
-                "输出模式",
-                ["简洁输出", "完整输出"],  # 调整顺序，简洁输出在前
-                index=0,  # 默认选择第一个选项（简洁输出）
-                horizontal=True,
-                help="简洁输出只显示润色后文本，完整输出显示修改详情"
-            )
+        output_mode = st.radio(
+            "输出模式",
+            ["简洁输出", "完整输出"],
+            index=0,
+            horizontal=True,
+            help="简洁输出只显示润色后文本，完整输出展示修改详情与评分对比"
+        )
         
         # 润色按钮
         if st.button("🚀 开始润色", type="primary"):
-            logger.info(f"开始润色论文 - 输入方式: {input_method}, 风格: {style_choice}, 输出模式: {output_mode}")
+            logger.info(f"开始润色论文 - 输入方式: {input_method}, 输出模式: {output_mode}")
             logger.info(f"输入文本长度: {len(paper_text)} 字符")
             
             with st.spinner("正在润色论文..."):
@@ -227,10 +349,10 @@ def paper_polishing_interface():
                     # 根据输出模式执行不同的润色方法
                     if output_mode == "简洁输出":
                         logger.info("使用简洁输出模式进行润色")
-                        result = polisher.polish_paper_simple(paper_text, style=style_choice)
+                        result = polisher.polish_paper_simple(paper_text)
                     else:
                         logger.info("使用完整输出模式进行润色")
-                        result = polisher.polish_paper(paper_text, style=style_choice)
+                        result = polisher.polish_paper(paper_text)
                     
                     if result.get('success', False):
                         logger.info("润色成功")
@@ -244,16 +366,6 @@ def paper_polishing_interface():
                 except Exception as e:
                     logger.exception("润色过程中出现异常")
                     st.error(f"❌ 润色过程中出现错误: {str(e)}")
-
-def get_style_display_name(style_key):
-    """将英文风格键转换为中文显示名称"""
-    style_display_map = {
-        'balanced': '平衡',
-        'conservative': '保守',
-        'innovative': '创新', 
-        'auto': '自动'
-    }
-    return style_display_map.get(style_key, style_key.title())
 
 def display_polishing_results(result, show_scores):
     """显示润色结果"""
@@ -273,16 +385,11 @@ def display_polishing_results(result, show_scores):
             
             with col2:
                 st.metric("应用修改", f"{summary.get('total_modifications_applied', 0)} 处")
-            
             with col3:
-                style_used = summary.get('style_used', 'balanced')
-                style_display = get_style_display_name(style_used)
-                st.metric("润色风格", style_display)
+                st.metric("修改覆盖率", f"{summary.get('estimated_coverage', 0):.0%}" if summary.get('estimated_coverage') is not None else "—")
     else:
         # 简洁模式：只显示基本信息
-        style_used = result.get('style_used', 'balanced')
-        style_display = get_style_display_name(style_used)
-        st.info(f"📝 使用 {style_display} 进行润色")
+        st.info("📝 已根据风格指南自动完成整体润色")
     
     # 润色后的文本
     st.markdown('<div class="section-header">📄 润色后的论文</div>', unsafe_allow_html=True)
@@ -579,26 +686,23 @@ def style_guide_interface():
         st.markdown("### 📊 指南摘要")
         
         if guide_type == "hybrid":
-            # 混合风格指南的显示逻辑
             col1, col2, col3, col4 = st.columns(4)
             
+            total_rules, official_rules, empirical_rules = compute_hybrid_rule_counts(guide)
+            
             with col1:
-                total_rules = guide.get('total_rules', 0)
                 st.metric("总规则数", total_rules)
             
             with col2:
-                official_rules = guide.get('official_rules_count', 0)
                 st.metric("官方规则", official_rules)
             
             with col3:
-                empirical_rules = guide.get('empirical_rules_count', 0)
                 st.metric("历史经验规则", empirical_rules)
             
             with col4:
-                st.metric("分析论文数", 80)  # 混合指南基于80篇论文
+                st.metric("分析论文数", 80)
             
-            # 显示指南类型
-            st.info(f"📋 当前使用：**混合风格指南** (官方规则 + 历史经验规则)")
+            st.info("📋 当前使用：**混合风格指南** (官方规则 + 历史经验规则)")
             
         else:
             # 标准风格指南的显示逻辑
@@ -625,125 +729,143 @@ def style_guide_interface():
                 st.metric("分析论文数", guide.get('total_papers_analyzed', 0))
         
         if guide_type == "hybrid":
-            # 混合风格指南的规则显示
-            categories = guide.get('categories', {})
-            if categories:
-                st.markdown("### 📂 规则类别分布")
+            hybrid_schema = _detect_hybrid_schema(guide)
+            
+            if hybrid_schema == "structured":
+                categories = guide.get('categories', {})
+                if categories:
+                    st.markdown("### 📂 规则类别分布")
+                    
+                    category_names = list(categories.keys())
+                    category_counts = [len(rules) for rules in categories.values()]
+                    
+                    fig = px.pie(
+                        values=category_counts,
+                        names=category_names,
+                        title="规则类别分布"
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
                 
-                category_names = list(categories.keys())
-                category_counts = [len(rules) for rules in categories.values()]
+                st.markdown("### 📋 规则详情")
                 
-                fig = px.pie(
-                    values=category_counts,
-                    names=category_names,
-                    title="规则类别分布"
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            
-            # 分离官方规则和历史经验规则
-            st.markdown("### 📋 规则详情")
-            
-            # 官方规则
-            official_rules = []
-            empirical_rules = []
-            
-            for category_name, rules in categories.items():
-                for rule in rules:
-                    if rule.get('rule_type') == 'official':
-                        official_rules.append(rule)
-                    elif rule.get('rule_type') in ['frequent', 'common', 'alternative']:
-                        empirical_rules.append(rule)
-            
-            # 创建两个标签页
-            tab_official, tab_empirical = st.tabs(["🏛️ 官方规则", "📊 历史经验规则"])
-            
-            with tab_official:
-                st.markdown(f"### 🏛️ 官方规则 ({len(official_rules)}条)")
-                st.info("📌 官方规则：来自期刊官方指南，必须严格遵守")
+                official_rules = []
+                empirical_rules = []
                 
-                for i, rule in enumerate(official_rules, 1):
-                    with st.expander(f"{i}. {rule.get('description', '')}"):
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.write(f"**优先级**: {rule.get('priority', '')}")
-                            st.write(f"**类别**: {rule.get('category', '')}")
-                            st.write(f"**执行级别**: {rule.get('enforcement_level', '')}")
-                            st.write(f"**置信度**: {rule.get('confidence', 0):.1%}")
-                        
-                        with col2:
-                            st.write(f"**规则ID**: `{rule.get('rule_id', '')}`")
-                            st.write(f"**来源**: {rule.get('source', '')}")
-                            if rule.get('section'):
-                                st.write(f"**章节**: {rule.get('section', '')}")
-                        
-                        # 显示要求
-                        requirements = rule.get('requirements', [])
-                        if requirements:
-                            st.write("**要求**:")
-                            for req in requirements:
-                                st.write(f"• {req}")
-                        
-                        # 显示禁止项
-                        prohibitions = rule.get('prohibitions', [])
-                        if prohibitions:
-                            st.write("**禁止**:")
-                            for proh in prohibitions:
-                                st.write(f"• ❌ {proh}")
-                        
-                        # 显示示例
-                        examples = rule.get('examples', [])
-                        if examples:
-                            st.write("**示例**:")
-                            for example in examples:
-                                if isinstance(example, dict):
-                                    if 'correct' in example:
-                                        st.write(f"✅ **正确**: {example['correct']}")
-                                    if 'incorrect' in example:
-                                        st.write(f"❌ **错误**: {example['incorrect']}")
-                                    if 'explanation' in example:
-                                        st.write(f"💡 **说明**: {example['explanation']}")
-                                else:
+                for category_name, rules in categories.items():
+                    for rule in rules:
+                        if rule.get('rule_type') == 'official':
+                            official_rules.append(rule)
+                        elif rule.get('rule_type') in ['frequent', 'common', 'alternative']:
+                            empirical_rules.append(rule)
+                
+                tab_official, tab_empirical = st.tabs(["🏛️ 官方规则", "📊 历史经验规则"])
+                
+                with tab_official:
+                    st.markdown(f"### 🏛️ 官方规则 ({len(official_rules)}条)")
+                    st.info("📌 官方规则：来自期刊官方指南，必须严格遵守")
+                    
+                    for i, rule in enumerate(official_rules, 1):
+                        with st.expander(f"{i}. {rule.get('description', '')}"):
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.write(f"**优先级**: {rule.get('priority', '')}")
+                                st.write(f"**类别**: {rule.get('category', '')}")
+                                st.write(f"**执行级别**: {rule.get('enforcement_level', '')}")
+                                st.write(f"**置信度**: {rule.get('confidence', 0):.1%}")
+                            
+                            with col2:
+                                st.write(f"**规则ID**: `{rule.get('rule_id', '')}`")
+                                st.write(f"**来源**: {rule.get('source', '')}")
+                                if rule.get('section'):
+                                    st.write(f"**章节**: {rule.get('section', '')}")
+                            
+                            requirements = rule.get('requirements', [])
+                            if requirements:
+                                st.write("**要求**:")
+                                for req in requirements:
+                                    st.write(f"• {req}")
+                            
+                            prohibitions = rule.get('prohibitions', [])
+                            if prohibitions:
+                                st.write("**禁止**:")
+                                for proh in prohibitions:
+                                    st.write(f"• ❌ {proh}")
+                            
+                            examples = rule.get('examples', [])
+                            if examples:
+                                st.write("**示例**:")
+                                for example in examples:
+                                    if isinstance(example, dict):
+                                        if 'correct' in example:
+                                            st.write(f"✅ **正确**: {example['correct']}")
+                                        if 'incorrect' in example:
+                                            st.write(f"❌ **错误**: {example['incorrect']}")
+                                        if 'explanation' in example:
+                                            st.write(f"💡 **说明**: {example['explanation']}")
+                                    else:
+                                        st.write(f"• {example}")
+                
+                with tab_empirical:
+                    st.markdown(f"### 📊 历史经验规则 ({len(empirical_rules)}条)")
+                    st.info("📌 历史经验规则：基于80篇AMJ论文的分析结果")
+                    
+                    for i, rule in enumerate(empirical_rules, 1):
+                        with st.expander(f"{i}. {rule.get('description', '')}"):
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.write(f"**类别**: {rule.get('category', '')}")
+                                st.write(f"**遵循率**: {rule.get('frequency', 0):.1%}")
+                                st.write(f"**一致性**: {rule.get('consistency_rate', 0):.1%}")
+                            
+                            with col2:
+                                st.write(f"**规则ID**: `{rule.get('rule_id', '')}`")
+                                st.write(f"**来源**: {rule.get('source', '')}")
+                            
+                            evidence = rule.get('evidence', '')
+                            if evidence:
+                                st.write(f"**证据**: {evidence}")
+                            
+                            statistics = rule.get('statistics', {})
+                            if statistics:
+                                st.write("**统计信息**:")
+                                for key, value in statistics.items():
+                                    if isinstance(value, list):
+                                        st.write(f"• {key}: {', '.join(map(str, value))}")
+                                    else:
+                                        st.write(f"• {key}: {value}")
+                            
+                            examples = rule.get('examples', [])
+                            if examples:
+                                st.write("**示例**:")
+                                for example in examples:
                                     st.write(f"• {example}")
-            
-            with tab_empirical:
-                st.markdown(f"### 📊 历史经验规则 ({len(empirical_rules)}条)")
-                st.info("📌 历史经验规则：基于80篇AMJ论文的分析结果")
+            else:
+                st.markdown("### 🏛️ 官方规则")
+                official_sections = _get_official_sections(guide)
+                for document_title, sections in official_sections.items():
+                    st.markdown(f"#### {document_title}")
+                    if isinstance(sections, dict):
+                        for section_name, section_content in sections.items():
+                            with st.expander(section_name):
+                                _render_official_section_content(section_content)
+                    else:
+                        _render_official_section_content(sections)
                 
-                for i, rule in enumerate(empirical_rules, 1):
-                    with st.expander(f"{i}. {rule.get('description', '')}"):
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.write(f"**类别**: {rule.get('category', '')}")
-                            st.write(f"**遵循率**: {rule.get('frequency', 0):.1%}")
-                            st.write(f"**一致性**: {rule.get('consistency_rate', 0):.1%}")
-                        
-                        with col2:
-                            st.write(f"**规则ID**: `{rule.get('rule_id', '')}`")
-                            st.write(f"**来源**: {rule.get('source', '')}")
-                        
-                        # 显示证据
-                        evidence = rule.get('evidence', '')
-                        if evidence:
-                            st.write(f"**证据**: {evidence}")
-                        
-                        # 显示统计信息
-                        statistics = rule.get('statistics', {})
-                        if statistics:
-                            st.write("**统计信息**:")
-                            for key, value in statistics.items():
-                                if isinstance(value, list):
-                                    st.write(f"• {key}: {', '.join(map(str, value))}")
-                                else:
-                                    st.write(f"• {key}: {value}")
-                        
-                        # 显示示例
-                        examples = rule.get('examples', [])
-                        if examples:
-                            st.write("**示例**:")
-                            for example in examples:
-                                st.write(f"• {example}")
+                st.markdown("### 📊 历史经验规则")
+                historical_patterns = _get_historical_patterns(guide)
+                for category_name, pattern_groups in historical_patterns.items():
+                    if not isinstance(pattern_groups, dict):
+                        continue
+                    category_total = sum(len(pattern_list) for pattern_list in pattern_groups.values() if isinstance(pattern_list, list))
+                    st.markdown(f"#### {_format_label(category_name)}（{category_total}条）")
+                    for group_name, pattern_list in pattern_groups.items():
+                        if not isinstance(pattern_list, list) or not pattern_list:
+                            continue
+                        st.markdown(f"**{_format_label(group_name)}** ({len(pattern_list)}条)")
+                        for pattern in pattern_list:
+                            _render_pattern_entry(pattern)
         
         else:
             # 标准风格指南的规则显示

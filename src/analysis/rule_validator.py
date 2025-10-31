@@ -403,7 +403,7 @@ def main():
         {
             "rule_id": "test-official-1",
             "description": "Use passive voice in academic writing",
-            "category": "学术表达",
+            "category": "Voice & Tone",
             "priority": "high",
         }
     ]
