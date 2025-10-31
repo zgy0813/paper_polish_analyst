@@ -42,9 +42,7 @@
 
 - 🤖 **[AI模型配置指南](docs/AI模型配置指南.md)** - 详细的AI模型配置和优化指南
 - 📊 **[AI模型参数配置分析文档](docs/AI模型参数配置分析文档.md)** - 深入分析AI模型参数配置原理
-- 🔍 **[单文件分析使用指南](docs/单个文件分析使用指南.md)** - 单个文件分析的详细使用说明
-- 📋 **[多文件合并分析逻辑详解文档](docs/多文件合并分析逻辑详解文档.md)** - 多文件合并分析的完整逻辑说明
-- 🏛️ **[官方style文档整合历史期刊论文规则逻辑详解文档](docs/官方style文档整合历史期刊论文规则逻辑详解文档.md)** - 官方风格指南整合的详细逻辑
+- ⚙️ **[模型配置说明](docs/模型配置说明.md)** - 智能模型选择和任务配置指南
 - 🧠 **[NLP分析原理详解文档](docs/NLP分析原理详解文档.md)** - NLP分析的技术原理和实现细节
 - 📋 **[JSON解析改进设计文档](docs/JSON解析改进设计文档.md)** - JSON解析功能的改进设计说明
 
@@ -406,6 +404,10 @@ PDF文件 → PyMuPDF解析 → 布局分析 → 文本重组 → 清理优化 �
 ### 技术栈
 
 - **AI模型**: OpenAI GPT（推荐）/ DeepSeek API
+  - 智能模型选择：系统会根据任务类型自动选择最适合的模型
+  - 单篇分析：deepseek-reasoner（深度推理）
+  - 批次汇总：deepseek-chat（快速处理）
+  - 全局整合：deepseek-chat（高效整合）
 - **PDF处理**: PyMuPDF (fitz)
 - **NLP分析**: spaCy (en_core_web_md), scikit-learn
 - **Web界面**: Streamlit, Plotly
@@ -538,11 +540,19 @@ PDF论文 → 文本提取 → 增量分析 → 分层特征提取 → 风格指
 export OPENAI_API_KEY="your_openai_key"         # 推荐使用OpenAI
 export DEEPSEEK_API_KEY="your_deepseek_key"     # 或使用DeepSeek
 
-# 可选配置
+# AI提供商选择（推荐）
 export AI_PROVIDER="openai"                     # AI提供商选择（openai/deepseek）
+
+# DeepSeek按任务类型选择模型（如果使用DeepSeek）
+export DEEPSEEK_MODEL_INDIVIDUAL="deepseek-reasoner"  # 单篇分析（深度推理）
+export DEEPSEEK_MODEL_BATCH="deepseek-chat"           # 批次汇总（快速处理）
+export DEEPSEEK_MODEL_GLOBAL="deepseek-chat"          # 全局整合（高效整合）
+
+# 可选配置
 export BATCH_SIZE=10                            # 批次大小
 export MAX_PAPERS=100                           # 最大论文数
 export AI_TEMPERATURE=0.3                       # AI生成温度
+export AI_MAX_TOKENS=4000                       # 最大token数
 ```
 
 ### 配置文件 (`config.py`)
@@ -550,24 +560,33 @@ export AI_TEMPERATURE=0.3                       # AI生成温度
 主要配置项包括：
 
 ```python
+# AI API配置
+AI_PROVIDER = 'openai'                          # AI提供商（openai/deepseek）
+OPENAI_API_KEY = 'your_key'                     # OpenAI API密钥
+DEEPSEEK_API_KEY = 'your_key'                   # DeepSeek API密钥
+
+# 按任务类型选择模型（DeepSeek）
+DEEPSEEK_MODEL_INDIVIDUAL = 'deepseek-reasoner' # 单篇分析
+DEEPSEEK_MODEL_BATCH = 'deepseek-chat'          # 批次汇总
+DEEPSEEK_MODEL_GLOBAL = 'deepseek-chat'         # 全局整合
+
 # 分析配置
-BATCH_SIZE = 10                    # 每批分析的论文数量
-MAX_PAPERS = 100                   # 最大分析论文数量
+BATCH_SIZE = 10                                  # 每批分析的论文数量
+MAX_PAPERS = 100                                # 最大分析论文数量
 
 # 规则分类阈值
-CORE_RULE_THRESHOLD = 0.8          # 核心规则阈值（80%+论文遵循）
-OPTIONAL_RULE_THRESHOLD = 0.5      # 可选规则阈值（50%-80%论文遵循）
+CORE_RULE_THRESHOLD = 0.8                       # 核心规则阈值（80%+论文遵循）
+OPTIONAL_RULE_THRESHOLD = 0.5                   # 可选规则阈值（50%-80%论文遵循）
 
 # AI模型配置
-AI_MODEL = "GPT"                # 使用的AI模型（推荐GPT）
-AI_MAX_TOKENS = 4000               # 最大token数
-AI_TEMPERATURE = 0.3               # 生成温度
+AI_MAX_TOKENS = 4000                            # 最大token数
+AI_TEMPERATURE = 0.3                           # 生成温度
 
 # 质量评分权重
 SCORE_WEIGHTS = {
-    'style_match': 0.4,            # 风格匹配度权重
-    'academic_norm': 0.4,          # 学术规范性权重
-    'readability': 0.2             # 可读性权重
+    'style_match': 0.4,                          # 风格匹配度权重
+    'academic_norm': 0.4,                       # 学术规范性权重
+    'readability': 0.2                          # 可读性权重
 }
 ```
 
@@ -617,9 +636,7 @@ ai/
 ├── 📁 docs/                          # 文档目录
 │   ├── 🤖 AI模型配置指南.md
 │   ├── 📊 AI模型参数配置分析文档.md
-│   ├── 🔍 单个文件分析使用指南.md
-│   ├── 📋 多文件合并分析逻辑详解文档.md
-│   ├── 🏛️ 官方style文档整合历史期刊论文规则逻辑详解文档.md
+│   ├── ⚙️ 模型配置说明.md
 │   ├── 🧠 NLP分析原理详解文档.md
 │   └── 📋 JSON解析改进设计文档.md
 │

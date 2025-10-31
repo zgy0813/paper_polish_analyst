@@ -23,6 +23,11 @@ class Config:
     DEEPSEEK_MODEL = os.getenv('DEEPSEEK_MODEL', 'deepseek-chat')
     DEEPSEEK_BASE_URL = os.getenv('DEEPSEEK_BASE_URL', 'https://api.deepseek.com/v1')
     
+    # 按任务类型选择模型
+    DEEPSEEK_MODEL_INDIVIDUAL = os.getenv('DEEPSEEK_MODEL_INDIVIDUAL', 'deepseek-reasoner')  # 单篇分析
+    DEEPSEEK_MODEL_BATCH = os.getenv('DEEPSEEK_MODEL_BATCH', 'deepseek-reasoner')              # 批次汇总
+    DEEPSEEK_MODEL_GLOBAL = os.getenv('DEEPSEEK_MODEL_GLOBAL', 'deepseek-reasoner')           # 全局整合
+    
     # 通用配置
     AI_MAX_TOKENS = int(os.getenv('AI_MAX_TOKENS', '4000'))
     AI_TEMPERATURE = float(os.getenv('AI_TEMPERATURE', '0.3'))  # 0.3适合大多数分析任务，平衡创造性和一致性
@@ -65,14 +70,53 @@ class Config:
     CORE_RULE_THRESHOLD = 0.8    # 核心规则阈值(80%+论文遵循)
     OPTIONAL_RULE_THRESHOLD = 0.5  # 可选规则阈值(50%-80%论文遵循)
     
+    # ============ 官方规则配置 ============
+    # 官方规则路径（直接加载JSON，不使用AI解析）
+    OFFICIAL_GUIDE_JSON_PATH = os.path.join(OFFICIAL_GUIDES_DIR, 'AMJ_style_guide.json')
+    
+    # 风格特征分析开关（8大维度）
+    ENABLE_NARRATIVE_ANALYSIS = True
+    ENABLE_ARGUMENTATION_ANALYSIS = True
+    ENABLE_RHETORICAL_ANALYSIS = True
+    ENABLE_RHYTHM_ANALYSIS = True
+    ENABLE_VOICE_TONE_ANALYSIS = True
+    ENABLE_TERMINOLOGY_ANALYSIS = True
+    ENABLE_SECTION_ANALYSIS = True
+    ENABLE_CITATION_ARTISTRY_ANALYSIS = True
+    
+    # 输出路径
+    HYBRID_STYLE_GUIDE_JSON = os.path.join(DATA_DIR, 'hybrid_style_guide.json')
+    HYBRID_STYLE_GUIDE_MD = os.path.join(DATA_DIR, 'hybrid_style_guide.md')
+    
     @classmethod
-    def get_ai_config(cls):
-        """获取当前AI配置"""
+    def get_ai_config(cls, task_type: str = 'default'):
+        """
+        获取当前AI配置
+        
+        Args:
+            task_type: 任务类型
+                - 'default': 使用默认模型
+                - 'individual': 单篇分析（使用deepseek-reasoner）
+                - 'batch': 批次汇总（使用deepseek-reasoner）
+                - 'global': 全局整合（使用deepseek-reasoner）
+        
+        Returns:
+            AI配置字典
+        """
         if cls.AI_PROVIDER.lower() == 'deepseek':
+            # 根据任务类型选择合适的模型
+            model_mapping = {
+                'individual': cls.DEEPSEEK_MODEL_INDIVIDUAL,
+                'batch': cls.DEEPSEEK_MODEL_BATCH,
+                'global': cls.DEEPSEEK_MODEL_GLOBAL,
+                'default': cls.DEEPSEEK_MODEL
+            }
+            selected_model = model_mapping.get(task_type, cls.DEEPSEEK_MODEL)
+            
             return {
                 'provider': 'deepseek',
                 'api_key': cls.DEEPSEEK_API_KEY,
-                'model': cls.DEEPSEEK_MODEL,
+                'model': selected_model,
                 'base_url': cls.DEEPSEEK_BASE_URL,
                 'max_tokens': cls.AI_MAX_TOKENS,
                 'temperature': cls.AI_TEMPERATURE
@@ -97,7 +141,6 @@ class Config:
             print(f"⚠️ {ai_config['provider'].upper()}_API_KEY 环境变量未设置，部分功能可能不可用")
         else:
             print(f"✅ 使用 {ai_config['provider'].upper()} API")
-            print(f"   模型: {ai_config['model']}")
             print(f"   Base URL: {ai_config['base_url']}")
         
         # 确保目录存在

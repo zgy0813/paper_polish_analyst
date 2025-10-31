@@ -1,0 +1,42 @@
+Analyze the writing style features of the following academic paper across 8 dimensions:
+
+1. **Narrative Strategies**:
+   - Opening strategy (story/statistics/paradox/literature gap)
+   - Story arc (problem → discovery narrative rhythm)
+   - Evidence presentation style (quantitative vs qualitative balance)
+
+2. **Argumentation Patterns**:
+   - Theory building approach (inductive vs deductive)
+   - Counterargument handling (anticipation of objections)
+   - Logic connectives usage (therefore, however, moreover)
+
+3. **Rhetorical Devices**:
+   - Emphasis techniques (repetition, rhetorical questions)
+   - Hedging vs boosting (may/suggest vs clearly/substantial)
+   - Metaphors and analogies usage
+
+4. **Rhythm & Flow**:
+   - Sentence variety (length variation, structure diversity)
+   - Paragraph transitions (bridging techniques)
+   - Reading pace (information density variation)
+
+5. **Voice & Tone**:
+   - Author presence ("we" usage scenarios)
+   - Confidence level (assertive vs exploratory)
+   - Engagement style (dialogue with readers)
+
+6. **Terminology Management**:
+   - Field-specific language density
+   - Accessibility balance (technical vs accessible)
+   - Conceptual clarity (definition methods)
+
+7. **Section-Specific Patterns**:
+   - Introduction style (problem statement positioning)
+   - Theory section style (hypothesis presentation)
+   - Methods transparency (detail level)
+   - Discussion depth (contribution layers)
+
+8. **Citation Integration Artistry**:
+   - Citation density patterns across sections
+   - Citation functions (supportive vs contrastive)
+   - Integration smoothness (flow disruption)

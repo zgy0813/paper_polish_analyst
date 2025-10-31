@@ -582,6 +582,227 @@ class NLPUtils:
             for word, score in sorted_words[:top_n]
         ]
 
+    # ============ 风格特征分析函数 ============
+    
+    def analyze_narrative_strategies(self, text: str, doc) -> Dict:
+        """分析叙事策略"""
+        first_paragraphs = text.split("\n\n")[:3]
+        
+        # 开篇策略分析
+        opening_keywords = {
+            "story": ["case", "example", "instance", "consider"],
+            "statistics": ["data", "analysis", "study", "research", "found", "shows"],
+            "paradox": ["however", "paradoxically", "contradiction", "surprisingly"],
+            "gap": ["gap", "limited", "little research", "few studies", "lack of"]
+        }
+        
+        opening_strategy = "other"
+        first_text = " ".join(first_paragraphs[:2]).lower()
+        for strategy, keywords in opening_keywords.items():
+            if sum(keyword in first_text for keyword in keywords) >= 2:
+                opening_strategy = strategy
+                break
+        
+        # 故事弧线分析（转折词频率）
+        transition_words = ["however", "but", "although", "nevertheless", "consequently"]
+        transition_count = sum(text.lower().count(word) for word in transition_words)
+        
+        return {
+            "opening_strategy": opening_strategy,
+            "transition_word_frequency": transition_count / max(len(doc), 1) * 100,
+            "evidence_balance": self._analyze_evidence_balance(text)
+        }
+    
+    def analyze_argumentation_patterns(self, text: str, doc) -> Dict:
+        """分析论证模式"""
+        # 理论构建方式
+        inductive_markers = ["suggests", "indicates", "implies", "emerges from", "derived from"]
+        deductive_markers = ["hypothesize", "predict", "proposes", "follows from", "based on"]
+        
+        inductive_score = sum(text.lower().count(marker) for marker in inductive_markers)
+        deductive_score = sum(text.lower().count(marker) for marker in deductive_markers)
+        theory_building = "inductive" if inductive_score > deductive_score else "deductive"
+        
+        # 逻辑连接词
+        logic_connectives = {
+            "causal": ["therefore", "thus", "consequently", "because", "as a result"],
+            "contrast": ["however", "whereas", "in contrast", "on the other hand"],
+            "addition": ["furthermore", "moreover", "additionally", "also"]
+        }
+        
+        connective_counts = {key: sum(text.lower().count(word) for word in words) 
+                            for key, words in logic_connectives.items()}
+        
+        return {
+            "theory_building": theory_building,
+            "logic_connectives": connective_counts,
+            "counterargument_handling": self._detect_counterarguments(text)
+        }
+    
+    def analyze_rhetorical_devices(self, text: str, doc) -> Dict:
+        """分析修辞手法"""
+        # 缓和与强化表达
+        hedging_words = ["may", "might", "suggest", "appear", "seem", "likely", "possibly"]
+        boosting_words = ["clearly", "undoubtedly", "substantial", "significant", "strongly"]
+        
+        hedging_score = sum(text.lower().count(word) for word in hedging_words)
+        boosting_score = sum(text.lower().count(word) for word in boosting_words)
+        
+        # 疑问句（可能是修辞）
+        question_count = text.count("?")
+        
+        return {
+            "hedging_ratio": hedging_score / max(hedging_score + boosting_score, 1),
+            "boosting_ratio": boosting_score / max(hedging_score + boosting_score, 1),
+            "question_count": question_count
+        }
+    
+    def analyze_rhythm_flow(self, text: str, doc) -> Dict:
+        """分析节奏流畅度"""
+        sentences = [sent.text for sent in doc.sents]
+        
+        if not sentences:
+            return {}
+        
+        # 句长变化
+        sentence_lengths = [len(sent.split()) for sent in sentences]
+        length_variance = np.var(sentence_lengths)
+        
+        # 段落过渡词
+        transition_words = ["however", "moreover", "furthermore", "in addition", "nevertheless"]
+        transition_frequency = sum(text.lower().count(word) for word in transition_words) / len(sentences)
+        
+        return {
+            "sentence_variety": {
+                "variance": length_variance,
+                "avg_length": np.mean(sentence_lengths),
+                "range": max(sentence_lengths) - min(sentence_lengths) if sentence_lengths else 0
+            },
+            "transition_frequency": transition_frequency
+        }
+    
+    def analyze_voice_tone(self, text: str, doc) -> Dict:
+        """分析语态语气"""
+        # 作者在场感（"we"/"our"使用）
+        we_count = len([token for token in doc if token.text.lower() in ["we", "our"]])
+        we_ratio = we_count / max(len([token for token in doc if token.pos_ == "PRON"]), 1)
+        
+        # 自信度（assertive vs exploratory）
+        assertive_markers = ["demonstrate", "prove", "establish", "confirm", "clearly"]
+        exploratory_markers = ["suggest", "may", "might", "appear", "seem"]
+        
+        assertive_score = sum(text.lower().count(marker) for marker in assertive_markers)
+        exploratory_score = sum(text.lower().count(marker) for marker in exploratory_markers)
+        
+        confidence_level = "assertive" if assertive_score > exploratory_score else "exploratory"
+        
+        return {
+            "author_presence": {
+                "we_usage_count": we_count,
+                "we_ratio": we_ratio
+            },
+            "confidence_level": confidence_level
+        }
+    
+    def analyze_terminology_management(self, text: str, doc) -> Dict:
+        """分析术语管理"""
+        # 专业术语识别（学术词汇后缀）
+        academic_suffixes = ["tion", "sion", "ment", "ity", "ism", "istic", "logy"]
+        terminology_count = sum(
+            1 for token in doc 
+            if any(token.text.lower().endswith(suffix) for suffix in academic_suffixes)
+        )
+        
+        # 术语定义（引号或定义性句子）
+        quoted_terms = len([token for token in doc if token.text.startswith('"') and token.text.endswith('"')])
+        definition_markers = ["defined as", "refers to", "means", "denotes"]
+        definition_count = sum(text.lower().count(marker) for marker in definition_markers)
+        
+        return {
+            "terminology_density": terminology_count / max(len(doc), 1),
+            "terminology_definitions": quoted_terms + definition_count
+        }
+    
+    def analyze_section_patterns(self, sections: Dict[str, str]) -> Dict:
+        """分析章节模式"""
+        patterns = {}
+        
+        for section_name, section_text in sections.items():
+            if not section_text:
+                continue
+                
+            section_doc = self.nlp(section_text)
+            
+            # 假设位置分析
+            hypothesis_positions = []
+            if "hypothesis" in section_text.lower():
+                sentences = list(section_doc.sents)
+                for i, sent in enumerate(sentences):
+                    if "hypothesis" in sent.text.lower():
+                        hypothesis_positions.append(i / max(len(sentences), 1))
+            
+            # 方法透明性（详细信息密度）
+            detail_markers = ["details", "specific", "precise", "exactly", "measured"]
+            transparency_score = sum(section_text.lower().count(marker) for marker in detail_markers)
+            
+            patterns[section_name] = {
+                "length": len(section_text.split()),
+                "hypothesis_positions": hypothesis_positions,
+                "transparency_score": transparency_score
+            }
+        
+        return patterns
+    
+    def analyze_citation_artistry(self, text: str, doc) -> Dict:
+        """分析引用艺术"""
+        # 引用密度（括号格式的引用）
+        citation_pattern = r'\([A-Z][a-z]+,?\s*\d{4}[a-z]?\)'
+        citations = re.findall(citation_pattern, text)
+        citation_density = len(citations) / max(len(text.split()), 1)
+        
+        # 引用功能（支持性 vs 对比性）
+        supportive_markers = ["consistent with", "support", "confirm", "demonstrate"]
+        contrastive_markers = ["however", "in contrast", "although", "disagree"]
+        
+        supportive_score = sum(text.lower().count(marker) for marker in supportive_markers)
+        contrastive_score = sum(text.lower().count(marker) for marker in contrastive_markers)
+        
+        return {
+            "citation_density": citation_density,
+            "citation_function": {
+                "supportive_ratio": supportive_score / max(supportive_score + contrastive_score, 1),
+                "contrastive_ratio": contrastive_score / max(supportive_score + contrastive_score, 1)
+            }
+        }
+    
+    # ============ 辅助函数 ============
+    
+    def _analyze_evidence_balance(self, text: str) -> Dict:
+        """分析证据平衡（定量vs定性）"""
+        quantitative_markers = ["data", "analysis", "statistical", "quantitative", "sample", "N="]
+        qualitative_markers = ["qualitative", "case study", "interview", "observation", "ethnographic"]
+        
+        quantitative_count = sum(text.lower().count(marker) for marker in quantitative_markers)
+        qualitative_count = sum(text.lower().count(marker) for marker in qualitative_markers)
+        
+        total = quantitative_count + qualitative_count
+        return {
+            "quantitative_ratio": quantitative_count / max(total, 1),
+            "qualitative_ratio": qualitative_count / max(total, 1)
+        }
+    
+    def _detect_counterarguments(self, text: str) -> Dict:
+        """检测反驳处理"""
+        counterargument_markers = ["however", "although", "nevertheless", "despite", "contrary"]
+        limitation_markers = ["limitation", "limitation", "constraint", "caveat"]
+        alternative_markers = ["alternative", "competing", "different view"]
+        
+        return {
+            "counterargument_markers": sum(text.lower().count(marker) for marker in counterargument_markers),
+            "limitation_discussion": sum(text.lower().count(marker) for marker in limitation_markers),
+            "alternative_explanation": sum(text.lower().count(marker) for marker in alternative_markers)
+        }
+
 
 def main():
     """测试NLP工具功能"""

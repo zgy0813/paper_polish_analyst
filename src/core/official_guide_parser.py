@@ -398,6 +398,25 @@ class OfficialGuideParser:
     def has_cache(self) -> bool:
         """检查是否存在有效的缓存文件"""
         return self.cache_file.exists()
+    
+    def load_manual_json_guide(self, json_path: str = "data/official_guides/AMJ_style_guide.json") -> Dict:
+        """
+        直接加载手动转换的官方规则JSON
+        
+        Args:
+            json_path: 官方规则JSON文件路径
+            
+        Returns:
+            官方规则原始内容（嵌套结构）
+        """
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                official_rules = json.load(f)
+            logger.info(f"官方规则已从 {json_path} 加载")
+            return official_rules
+        except Exception as e:
+            logger.error(f"加载官方规则JSON失败: {str(e)}")
+            return {}
 
 
 def main():

@@ -4,7 +4,15 @@
 
 本系统支持多种AI API提供商，包括：
 - **OpenAI** (GPT-4, GPT-3.5-turbo)
-- **DeepSeek** (deepseek-chat)
+- **DeepSeek** (deepseek-chat, deepseek-reasoner)
+
+### 智能模型选择
+
+系统会根据任务类型自动选择最适合的模型：
+
+- **单篇文档分析**：使用 `deepseek-reasoner` (深度推理)
+- **批次汇总**：使用 `deepseek-chat` (快速处理)
+- **全局整合**：使用 `deepseek-chat` (高效整合)
 
 ## ⚙️ 配置方法
 
@@ -20,6 +28,11 @@ AI_PROVIDER=deepseek
 DEEPSEEK_API_KEY=your_deepseek_api_key_here
 DEEPSEEK_MODEL=deepseek-chat
 DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+
+# 按任务类型选择模型（推荐配置）
+DEEPSEEK_MODEL_INDIVIDUAL=deepseek-reasoner  # 单篇分析
+DEEPSEEK_MODEL_BATCH=deepseek-chat           # 批次汇总
+DEEPSEEK_MODEL_GLOBAL=deepseek-chat          # 全局整合
 
 # 通用配置
 AI_MAX_TOKENS=4000

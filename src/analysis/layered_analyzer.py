@@ -24,12 +24,22 @@ logger = get_logger(__name__)
 class LayeredAnalyzer:
     """分层风格分析器"""
 
-    def __init__(self):
-        """初始化分析器"""
+    def __init__(self, task_type: str = 'default'):
+        """
+        初始化分析器
+        
+        Args:
+            task_type: 任务类型
+                - 'default': 默认配置
+                - 'individual': 单篇分析（使用deepseek-reasoner）
+                - 'batch': 批次汇总
+                - 'global': 全局整合
+        """
         self.nlp_utils = NLPUtils()
         self.ai_client = get_ai_client()
         self.prompts = PromptTemplates()
-        self.ai_config = Config.get_ai_config()
+        self.ai_config = Config.get_ai_config(task_type=task_type)
+        self.task_type = task_type
 
         # 分层温度配置
         self.temperature_config = {
@@ -96,9 +106,9 @@ class LayeredAnalyzer:
                 ),
             }
 
-            # 使用GPT-4进行深度分析
+            # 使用GPT-4进行深度分析（使用风格特征分析方法）
             prompt = self.prompts.format_prompt(
-                self.prompts.get_individual_analysis_prompt(), paper_text=paper_text
+                self.prompts.get_style_features_analysis_prompt(), paper_text=paper_text
             )
 
             logger.info(f"完整Prompt长度: {len(prompt)} 字符")
@@ -386,11 +396,10 @@ class LayeredAnalyzer:
 
         try:
 
-            # 使用GPT-4进行批次汇总
+            # 使用GPT-4进行批次汇总（使用风格特征批次汇总方法）
             prompt = self.prompts.format_prompt(
-                self.prompts.get_batch_summary_prompt(),
+                self.prompts.get_style_features_batch_summary_prompt(),
                 paper_count=len(individual_reports),
-                batch_number=batch_id,
                 individual_analyses=json.dumps(
                     individual_reports, ensure_ascii=False, indent=2
                 ),
@@ -790,6 +799,10 @@ class LayeredAnalyzer:
             # 获取任务特定的系统消息
             system_message = self._get_system_message(task_type)
 
+            # 将任务类型映射到模型配置类型
+            model_task_type = self._map_task_type_to_model_config(task_type)
+            logger.debug(f"任务类型映射: {task_type} -> {model_task_type} (用于模型选择)")
+
             try:
                 response_text = self.ai_client.call_ai(
                     prompt=prompt,
@@ -801,7 +814,8 @@ class LayeredAnalyzer:
                         "top_p": 0.9,
                         "frequency_penalty": 0.1,
                         "presence_penalty": 0.1
-                    }
+                    },
+                    task_type=model_task_type
                 )
                 return response_text.strip()
 
@@ -812,6 +826,35 @@ class LayeredAnalyzer:
         except Exception as e:
             logger.error(f"AI API调用失败: {str(e)}")
             raise
+
+    def _map_task_type_to_model_config(self, task_type: str) -> str:
+        """
+        将任务类型映射到模型配置类型
+        
+        Args:
+            task_type: 任务类型（如 'batch_summary', 'individual_analysis' 等）
+            
+        Returns:
+            模型配置类型（'individual', 'batch', 'global', 'default'）
+        """
+        # 任务类型到模型配置的映射
+        mapping = {
+            'individual_analysis': 'individual',
+            'batch_summary': 'batch',
+            'global_integration': 'global',
+            'global_integration_union': 'global',
+        }
+        
+        # 如果找到映射，返回对应的模型配置类型
+        if task_type in mapping:
+            return mapping[task_type]
+        
+        # 如果初始化时指定了特定的任务类型，使用它
+        if self.task_type != 'default':
+            return self.task_type
+        
+        # 否则使用默认配置
+        return 'default'
 
     def _get_system_message(self, task_type: str) -> str:
         """

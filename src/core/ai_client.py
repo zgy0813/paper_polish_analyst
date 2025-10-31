@@ -37,7 +37,8 @@ class AIClient:
         task_name: str = "AI分析",
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
-        additional_params: Optional[Dict[str, Any]] = None
+        additional_params: Optional[Dict[str, Any]] = None,
+        task_type: str = 'default'
     ) -> str:
         """
         统一的AI调用方法
@@ -49,6 +50,7 @@ class AIClient:
             max_tokens: 最大token数，None时使用配置默认值
             temperature: 温度参数，None时使用配置默认值
             additional_params: 额外的API参数
+            task_type: 任务类型，用于动态选择模型（default/individual/batch/global）
             
         Returns:
             AI响应的文本内容
@@ -57,9 +59,16 @@ class AIClient:
             AICallError: AI调用失败时抛出
         """
         try:
+            # 根据任务类型动态获取模型配置
+            if task_type != 'default':
+                dynamic_config = Config.get_ai_config(task_type=task_type)
+                model_name = dynamic_config["model"]
+            else:
+                model_name = self.ai_config["model"]
+            
             # 准备API参数（只包含OpenAI API支持的参数）
             api_params = {
-                "model": self.ai_config["model"],
+                "model": model_name,
                 "messages": [
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": prompt}
@@ -114,7 +123,8 @@ class AIClient:
         task_name: str = "AI分析",
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
-        additional_params: Optional[Dict[str, Any]] = None
+        additional_params: Optional[Dict[str, Any]] = None,
+        task_type: str = 'default'
     ) -> Dict[str, Any]:
         """
         调用AI并解析JSON响应
@@ -126,6 +136,7 @@ class AIClient:
             max_tokens: 最大token数
             temperature: 温度参数
             additional_params: 额外的API参数
+            task_type: 任务类型，用于动态选择模型
             
         Returns:
             解析后的JSON数据
@@ -141,7 +152,8 @@ class AIClient:
                 task_name=task_name,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                additional_params=additional_params
+                additional_params=additional_params,
+                task_type=task_type
             )
             
             # 清理响应文本，移除markdown代码块标记
@@ -219,7 +231,8 @@ class AIClient:
         task_name: str = "AI结构化分析",
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
-        additional_params: Optional[Dict[str, Any]] = None
+        additional_params: Optional[Dict[str, Any]] = None,
+        task_type: str = 'default'
     ) -> T:
         """
         调用AI并返回结构化输出
@@ -232,6 +245,7 @@ class AIClient:
             max_tokens: 最大token数，None时使用配置默认值
             temperature: 温度参数，None时使用配置默认值
             additional_params: 额外的API参数
+            task_type: 任务类型，用于动态选择模型
             
         Returns:
             解析后的Pydantic模型实例
@@ -241,9 +255,16 @@ class AIClient:
             ValidationError: 模型验证失败时抛出
         """
         try:
+            # 根据任务类型动态获取模型配置
+            if task_type != 'default':
+                dynamic_config = Config.get_ai_config(task_type=task_type)
+                model_name = dynamic_config["model"]
+            else:
+                model_name = self.ai_config["model"]
+            
             # 准备API参数（只包含OpenAI API支持的参数）
             api_params = {
-                "model": self.ai_config["model"],
+                "model": model_name,
                 "messages": [
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": prompt}
@@ -482,10 +503,7 @@ class AIClient:
         
         # 记录完整prompt（截断显示）
         logger.info("--- 完整Prompt ---")
-        if len(prompt) > 1000:
-            logger.info(f"{prompt[:500]}...\n...\n{prompt[-500:]}")
-        else:
-            logger.info(prompt)
+        logger.info(prompt)
         logger.info("--- Prompt结束 ---")
     
     def _log_ai_output(
@@ -516,10 +534,7 @@ class AIClient:
         
         # 记录响应内容（截断显示）
         logger.info("--- 完整响应 ---")
-        if len(response_text) > 1000:
-            logger.info(f"{response_text[:500]}...\n...\n{response_text[-500:]}")
-        else:
-            logger.info(response_text)
+        logger.info(response_text)
         logger.info("--- 响应结束 ---")
     
     def get_stats(self) -> Dict[str, Any]:

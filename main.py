@@ -105,8 +105,8 @@ def analyze_individual(max_papers, resume, progress):
         # 验证配置
         Config.validate()
         
-        # 创建分析器
-        analyzer = LayeredAnalyzer()
+        # 创建分析器（单篇分析使用deepseek-reasoner）
+        analyzer = LayeredAnalyzer(task_type='individual')
         
         # 显示进度（如果启用）
         if progress:
@@ -682,52 +682,76 @@ def generate_guide(input_dir, output):
         click.echo(f"  批次数: {total_batches}")
         click.echo(f"  论文数: {total_papers}")
         
-        # 显示规则分类详情
-        rule_categories = style_guide.get('rule_categories', {})
-        if rule_categories:
-            click.echo(f"\n📋 规则分类详情:")
-            total_rules = 0
-            
-            for category_name, category_data in rule_categories.items():
-                if isinstance(category_data, dict) and 'rules' in category_data:
-                    rule_count = len(category_data['rules'])
-                    total_rules += rule_count
+        # 显示规则分类详情（3.0版本 - 8大维度）
+        dimensions = [
+            'narrative_strategies', 'argumentation_patterns', 'rhetorical_devices',
+            'rhythm_flow', 'voice_tone', 'terminology_management',
+            'section_patterns', 'citation_artistry'
+        ]
+        
+        click.echo(f"\n📋 规则分类详情（按维度统计）:")
+        total_patterns = 0
+        dimension_stats = {}
+        
+        for dimension in dimensions:
+            dimension_data = style_guide.get(dimension, {})
+            if dimension_data:
+                freq_count = len(dimension_data.get('frequent_patterns', []))
+                common_count = len(dimension_data.get('common_patterns', []))
+                alt_count = len(dimension_data.get('alternative_patterns', []))
+                dim_total = freq_count + common_count + alt_count
+                
+                if dim_total > 0:
+                    dimension_stats[dimension] = {
+                        'frequent': freq_count,
+                        'common': common_count,
+                        'alternative': alt_count,
+                        'total': dim_total
+                    }
+                    total_patterns += dim_total
                     
-                    # 获取类别信息
-                    threshold = category_data.get('threshold', 'N/A')
-                    description = category_data.get('description', 'N/A')
-                    
-                    click.echo(f"  📌 {category_name}:")
-                    click.echo(f"    阈值: {threshold}")
-                    click.echo(f"    描述: {description}")
-                    click.echo(f"    规则数: {rule_count} 条")
-            
-            click.echo(f"\n📊 总规则数: {total_rules} 条")
-        else:
-            click.echo(f"📋 总规则数: 0 条")
+                    # 格式化维度名称显示
+                    dim_display = dimension.replace('_', ' ').title()
+                    click.echo(f"  📌 {dim_display}:")
+                    click.echo(f"    高频模式: {freq_count} 条")
+                    click.echo(f"    常见模式: {common_count} 条")
+                    click.echo(f"    替代模式: {alt_count} 条")
+                    click.echo(f"    小计: {dim_total} 条")
+        
+        click.echo(f"\n📊 总规则数: {total_patterns} 条")
         
         click.echo(f"\n💾 风格指南已保存到: {output}")
         
-        # 验证文件是否正确生成
+        # 验证文件是否正确生成（3.0版本）
         output_path = Path(output)
         if output_path.exists():
             with open(output_path, 'r', encoding='utf-8') as f:
                 saved_guide = json.load(f)
             
-            # 统计保存文件中的规则数量
-            saved_rule_categories = saved_guide.get('rule_categories', {})
-            saved_rules = 0
+            # 统计保存文件中的规则数量（8大维度）
+            dimensions = [
+                'narrative_strategies', 'argumentation_patterns', 'rhetorical_devices',
+                'rhythm_flow', 'voice_tone', 'terminology_management',
+                'section_patterns', 'citation_artistry'
+            ]
             
+            saved_total = 0
             click.echo(f"\n🔍 文件验证详情:")
-            for category_name, category_data in saved_rule_categories.items():
-                if isinstance(category_data, dict) and 'rules' in category_data:
-                    rule_count = len(category_data['rules'])
-                    saved_rules += rule_count
-                    
-                    threshold = category_data.get('threshold', 'N/A')
-                    click.echo(f"  ✅ {category_name}: {rule_count} 条规则 (阈值: {threshold})")
             
-            click.echo(f"✅ 验证成功: 文件包含 {saved_rules} 条规则")
+            for dimension in dimensions:
+                dimension_data = saved_guide.get(dimension, {})
+                if dimension_data:
+                    freq_count = len(dimension_data.get('frequent_patterns', []))
+                    common_count = len(dimension_data.get('common_patterns', []))
+                    alt_count = len(dimension_data.get('alternative_patterns', []))
+                    dim_total = freq_count + common_count + alt_count
+                    
+                    if dim_total > 0:
+                        saved_total += dim_total
+                        dim_display = dimension.replace('_', ' ').title()
+                        click.echo(f"  ✅ {dim_display}: {dim_total} 条模式 (高频:{freq_count}, 常见:{common_count}, 替代:{alt_count})")
+            
+            click.echo(f"✅ 验证成功: 文件包含 {saved_total} 条规则")
         else:
             click.echo("⚠️ 警告: 输出文件未找到")
         

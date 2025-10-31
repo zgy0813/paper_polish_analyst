@@ -960,6 +960,279 @@ class StyleGuideGenerator:
 
         return "\n".join(content)
 
+    # ============ 官方规则加载与综合指南生成 ============
+    
+    def load_official_rules_from_json(self, json_path: str = "data/official_guides/AMJ_style_guide.json") -> Dict:
+        """
+        直接加载官方规则JSON（不做AI解析）
+        
+        Args:
+            json_path: JSON文件路径
+            
+        Returns:
+            官方规则原始内容
+        """
+        from ..core.official_guide_parser import OfficialGuideParser
+        
+        parser = OfficialGuideParser()
+        return parser.load_manual_json_guide(json_path)
+    
+    def generate_comprehensive_hybrid_guide(
+        self,
+        official_rules_path: str = "data/official_guides/AMJ_style_guide.json",
+        style_features_data: Dict = None
+    ) -> Dict:
+        """
+        生成综合Hybrid Style Guide
+        
+        Part 1: 官方规则（直接从JSON加载）
+        Part 2: 风格特征（从历史分析得出）
+        
+        Args:
+            official_rules_path: 官方规则JSON路径
+            style_features_data: 风格特征数据
+            
+        Returns:
+            综合Hybrid Style Guide
+        """
+        logger.info("生成综合Hybrid Style Guide")
+        
+        # Part 1: 加载官方规则
+        official_rules = self.load_official_rules_from_json(official_rules_path)
+        
+        # Part 2: 风格特征
+        if not style_features_data:
+            style_features_data = self._load_style_features_from_cache()
+        
+        # 合并两部分
+        hybrid_guide = {
+            "guide_type": "comprehensive_hybrid",
+            "generation_date": datetime.now().isoformat(),
+            "part_1_official_rules": {
+                "description": "AMJ Official Style Guide - Mandatory Format Rules",
+                "source": "AMJ_style_guide.json",
+                "content": official_rules
+            },
+            "part_2_writing_style_features": {
+                "description": "AMJ Writing Style Features - Soft Writing Characteristics",
+                "source": "Historical Paper Analysis",
+                "features": style_features_data.get("features", {})
+            }
+        }
+        
+        # 保存JSON和Markdown两种格式
+        self._save_hybrid_guide_json(hybrid_guide)
+        self._save_hybrid_guide_markdown(hybrid_guide)
+        
+        return hybrid_guide
+    
+    def _load_style_features_from_cache(self) -> Dict:
+        """从缓存加载风格特征数据"""
+        cache_path = Path("data/style_features_cache.json")
+        if not cache_path.exists():
+            logger.warning("风格特征缓存文件不存在")
+            return {"features": {}}
+        
+        try:
+            with open(cache_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"加载风格特征缓存失败: {str(e)}")
+            return {"features": {}}
+    
+    def _save_hybrid_guide_json(self, hybrid_guide: Dict):
+        """保存Hybrid Style Guide为JSON格式"""
+        try:
+            output_path = Path("data/hybrid_style_guide.json")
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(hybrid_guide, f, ensure_ascii=False, indent=2)
+            
+            logger.info(f"Hybrid Style Guide JSON已保存到: {output_path}")
+        except Exception as e:
+            logger.error(f"保存JSON失败: {str(e)}")
+    
+    def _save_hybrid_guide_markdown(self, hybrid_guide: Dict):
+        """
+        生成Markdown格式的Hybrid Style Guide
+        
+        优化点：
+        - 添加目录导航
+        - 改进视觉层次
+        - 美化官方规则展示
+        - 增强可读性
+        """
+        md_content = []
+        
+        # 标题和生成时间
+        md_content.append("# AMJ Comprehensive Style Guide\n")
+        md_content.append(f"**Generated**: {hybrid_guide['generation_date']}\n\n")
+        
+        # 添加目录导航
+        md_content.append("## 📑 Table of Contents\n\n")
+        md_content.append("- [Part 1: Official Rules (官方规范)](#part-1-official-rules-官方规范)\n")
+        md_content.append("- [Part 2: Writing Style Features (写作风格特征)](#part-2-writing-style-features-写作风格特征)\n\n")
+        md_content.append("---\n\n")
+        
+        # Part 1: 官方规则
+        md_content.append("## Part 1: Official Rules (官方规范)\n")
+        md_content.append("*Must follow - Mandatory format and citation rules*\n\n")
+        md_content.append("> 💡 **Note**: These are official AMJ style requirements. Follow them strictly for accepted papers.\n\n")
+        
+        official_content = hybrid_guide["part_1_official_rules"]["content"]
+        
+        # 获取AMJ内容
+        amj_key = "Academy of Management STYLE GUIDE FOR AUTHORS"
+        if amj_key in official_content:
+            amj_content = official_content[amj_key]
+            
+            section_count = 0
+            for section_name, section_data in amj_content.items():
+                # 跳过introduction
+                if section_name == "introduction":
+                    continue
+                
+                section_count += 1
+                
+                # 使用更醒目的章节标题
+                md_content.append(f"### {section_count}. {section_name}\n\n")
+                
+                # 处理不同类型的内容
+                if isinstance(section_data, dict):
+                    if "content" in section_data:
+                        # 使用引用块美化长段落
+                        content = section_data['content']
+                        if len(content) > 200:
+                            # 长段落使用缩进
+                            md_content.append(f"    {content}\n\n")
+                        else:
+                            md_content.append(f"{content}\n\n")
+                    else:
+                        # 如果是字典但没有content字段，遍历子项
+                        for sub_key, sub_value in section_data.items():
+                            md_content.append(f"**{sub_key}**: ")
+                            if isinstance(sub_value, str):
+                                md_content.append(f"{sub_value}\n\n")
+                            elif isinstance(sub_value, dict):
+                                md_content.append("\n")
+                                for k, v in sub_value.items():
+                                    md_content.append(f"  - *{k}*: {v}\n")
+                                md_content.append("\n")
+                elif isinstance(section_data, str):
+                    md_content.append(f"{section_data}\n\n")
+        
+        md_content.append("---\n\n")
+        
+        # Part 2: 风格特征
+        md_content.append("## Part 2: Writing Style Features (写作风格特征)\n")
+        md_content.append("*Recommended - Soft writing characteristics of excellent AMJ papers*\n\n")
+        md_content.append("> 🎨 **Tip**: These style features are derived from analysis of published AMJ papers. They represent patterns commonly found in high-quality manuscripts.\n\n")
+        
+        features = hybrid_guide["part_2_writing_style_features"]["features"]
+        
+        feature_titles = {
+            "narrative_strategies": "Narrative Strategies (叙事策略)",
+            "argumentation_patterns": "Argumentation Patterns (论证模式)",
+            "rhetorical_devices": "Rhetorical Devices (修辞手法)",
+            "rhythm_flow": "Rhythm & Flow (节奏流畅度)",
+            "voice_tone": "Voice & Tone (语态语气)",
+            "terminology_management": "Terminology Management (术语管理)",
+            "section_patterns": "Section-Specific Patterns (章节模式)",
+            "citation_artistry": "Citation Integration Artistry (引用艺术)"
+        }
+        
+        feature_descriptions = {
+            "narrative_strategies": "How AMJ papers structure their narrative flow",
+            "argumentation_patterns": "Common argumentation and theory-building approaches",
+            "rhetorical_devices": "Language techniques for emphasis and persuasion",
+            "rhythm_flow": "Sentence variety and paragraph transition patterns",
+            "voice_tone": "Author presence and communication style",
+            "terminology_management": "Handling of technical terms and jargon",
+            "section_patterns": "Section-specific writing patterns",
+            "citation_artistry": "Citation density and integration techniques"
+        }
+        
+        feature_num = 1
+        for feature_key, feature_title in feature_titles.items():
+            feature_data = features.get(feature_key, {})
+            if not feature_data:
+                continue
+            
+            md_content.append(f"### {feature_num}. {feature_title}\n\n")
+            
+            # 添加描述
+            if feature_key in feature_descriptions:
+                md_content.append(f"*{feature_descriptions[feature_key]}*\n\n")
+            
+            # 格式化特征数据（美化版）
+            self._format_feature_markdown_enhanced(feature_data, md_content)
+            
+            md_content.append("\n")
+            feature_num += 1
+        
+        # 保存文件
+        output_path = Path("data/hybrid_style_guide.md")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(''.join(md_content))
+        
+        logger.info(f"Hybrid Style Guide Markdown已保存到: {output_path}")
+    
+    def _format_feature_markdown(self, feature_data: Dict, md_content: List[str]):
+        """格式化风格特征为Markdown（基础版）"""
+        if isinstance(feature_data, dict):
+            for key, value in feature_data.items():
+                if isinstance(value, dict):
+                    md_content.append(f"**{key}**:\n")
+                    self._format_feature_markdown(value, md_content)
+                elif isinstance(value, list):
+                    md_content.append(f"**{key}**:\n")
+                    for item in value:
+                        md_content.append(f"- {item}\n")
+                else:
+                    md_content.append(f"- **{key}**: {value}\n")
+        else:
+            md_content.append(f"- {feature_data}\n")
+    
+    def _format_feature_markdown_enhanced(self, feature_data: Dict, md_content: List[str]):
+        """格式化风格特征为Markdown（增强版，更美观）"""
+        if isinstance(feature_data, dict):
+            for key, value in feature_data.items():
+                if isinstance(value, dict):
+                    # 字典：使用小标题
+                    md_content.append(f"#### {key.replace('_', ' ').title()}\n\n")
+                    self._format_feature_markdown_enhanced(value, md_content)
+                elif isinstance(value, list):
+                    # 列表：使用表格（如果元素是字典）或列表
+                    if value and isinstance(value[0], dict):
+                        # 表格格式
+                        md_content.append(f"**{key.replace('_', ' ').title()}**:\n\n")
+                        md_content.append("| Key | Value |\n|-----|-------|\n")
+                        for item in value:
+                            if isinstance(item, dict):
+                                for k, v in item.items():
+                                    md_content.append(f"| {k} | {v} |\n")
+                        md_content.append("\n")
+                    else:
+                        # 普通列表
+                        md_content.append(f"**{key.replace('_', ' ').title()}**:\n")
+                        for item in value:
+                            md_content.append(f"- {item}\n")
+                        md_content.append("\n")
+                elif isinstance(value, (int, float)):
+                    # 数值：添加百分比或格式化
+                    if isinstance(value, float) and 0 <= value <= 1:
+                        md_content.append(f"- **{key.replace('_', ' ').title()}**: {value:.1%}\n\n")
+                    else:
+                        md_content.append(f"- **{key.replace('_', ' ').title()}**: {value}\n\n")
+                else:
+                    # 字符串
+                    md_content.append(f"- **{key.replace('_', ' ').title()}**: {value}\n\n")
+        else:
+            md_content.append(f"- {feature_data}\n\n")
+
 
 def main():
     """测试风格指南生成器"""

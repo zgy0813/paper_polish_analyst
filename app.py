@@ -23,6 +23,14 @@ from src.analysis.quality_scorer import QualityScorer
 from src.analysis.style_guide_generator import StyleGuideGenerator
 from src.log import get_log_summary, get_recent_errors, get_recent_warnings, search_logs_by_keyword, get_log_files_info
 
+# 设置日志
+from src.utils.logger_config import setup_logging, get_logger
+setup_logging()
+logger = get_logger(__name__)
+logger.info("=" * 60)
+logger.info("Streamlit Web应用启动")
+logger.info("=" * 60)
+
 # 页面配置
 st.set_page_config(
     page_title="论文风格分析与润色系统",
@@ -208,6 +216,9 @@ def paper_polishing_interface():
         
         # 润色按钮
         if st.button("🚀 开始润色", type="primary"):
+            logger.info(f"开始润色论文 - 输入方式: {input_method}, 风格: {style_choice}, 输出模式: {output_mode}")
+            logger.info(f"输入文本长度: {len(paper_text)} 字符")
+            
             with st.spinner("正在润色论文..."):
                 try:
                     # 创建润色器
@@ -215,17 +226,23 @@ def paper_polishing_interface():
                     
                     # 根据输出模式执行不同的润色方法
                     if output_mode == "简洁输出":
+                        logger.info("使用简洁输出模式进行润色")
                         result = polisher.polish_paper_simple(paper_text, style=style_choice)
                     else:
+                        logger.info("使用完整输出模式进行润色")
                         result = polisher.polish_paper(paper_text, style=style_choice)
                     
                     if result.get('success', False):
+                        logger.info("润色成功")
                         # 显示润色结果
                         display_polishing_results(result, False)
                     else:
-                        st.error(f"❌ 润色失败: {result.get('error', '未知错误')}")
+                        error_msg = result.get('error', '未知错误')
+                        logger.error(f"润色失败: {error_msg}")
+                        st.error(f"❌ 润色失败: {error_msg}")
                         
                 except Exception as e:
+                    logger.exception("润色过程中出现异常")
                     st.error(f"❌ 润色过程中出现错误: {str(e)}")
 
 def get_style_display_name(style_key):
@@ -391,6 +408,8 @@ def quality_assessment_interface():
     )
     
     if assessment_text and st.button("📊 开始评估", type="primary"):
+        logger.info(f"开始评估论文质量 - 文本长度: {len(assessment_text)} 字符")
+        
         with st.spinner("正在评估论文质量..."):
             try:
                 # 创建评分器
@@ -400,11 +419,15 @@ def quality_assessment_interface():
                 scores = scorer.score_paper(assessment_text)
                 
                 if 'error' not in scores:
+                    logger.info(f"评估成功 - 总分: {scores.get('overall_score', 0)}")
                     display_quality_scores(scores)
                 else:
-                    st.error(f"❌ 评估失败: {scores['error']}")
+                    error_msg = scores['error']
+                    logger.error(f"评估失败: {error_msg}")
+                    st.error(f"❌ 评估失败: {error_msg}")
                     
             except Exception as e:
+                logger.exception("评估过程中出现异常")
                 st.error(f"❌ 评估过程中出现错误: {str(e)}")
 
 def display_quality_scores(scores):
